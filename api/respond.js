@@ -2,6 +2,7 @@
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
 const BASE_ID = process.env.AIRTABLE_BASE_ID;
 const TABLE_NAME = "Responses";
+const ENG_TABLE = "Engagements";
 
 const MATURITY = [
   { min: 0,   max: 2.5,  label: "Crítico" },
@@ -17,7 +18,6 @@ function avg(arr) {
   const f = arr.filter(v => v != null);
   return f.length ? f.reduce((a, b) => a + b, 0) / f.length : null;
 }
-
 const CORE_DIMS = {
   alignment:  ["A1","A2","A3","A4","A5"],
   execution:  ["E1","E2","E3","E4","E5","E6","E7"],
@@ -54,37 +54,37 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { id, survey, meta, answers, timestamp } = req.body;
+    const { id, survey, meta, answers, timestamp, engagement_code } = req.body;
     if (!id || !survey || !meta || !answers) return res.status(400).json({ error: "Missing fields" });
 
     const isOPRI = survey === "core" || survey === "full";
     const scores = isOPRI ? computeScores(answers, survey) : null;
 
     const fields = {
-      response_id:         id,
-      survey:              survey,
-      timestamp:           timestamp || new Date().toISOString(),
-      respondent_company:  meta.company || "",
-      respondent_name:     meta.name || "",
-      respondent_level:    meta.level || "",
-      respondent_area:     meta.area || "",
-      respondent_country:  meta.country || "",
-      respondent_bu:       meta.bu || "",
-      answers_json:        JSON.stringify(answers),
-      pai_group:           PAI_LEAD.includes(meta.level) ? "Leadership" : "Organization",
+      response_id:          id,
+      engagement_code:      engagement_code || "",
+      survey,
+      timestamp:            timestamp || new Date().toISOString(),
+      respondent_company:   meta.company || "",
+      respondent_name:      meta.name || "",
+      respondent_level:     meta.level || "",
+      respondent_area:      meta.area || "",
+      respondent_country:   meta.country || "",
+      respondent_bu:        meta.bu || "",
+      answers_json:         JSON.stringify(answers),
+      pai_group:            PAI_LEAD.includes(meta.level) ? "Leadership" : "Organization",
     };
 
     if (scores) {
-      fields.opri_score        = Math.round(scores.opri * 100) / 100;
-      fields.alignment_score   = scores.alignment   != null ? Math.round(scores.alignment * 100) / 100 : null;
-      fields.execution_score   = scores.execution   != null ? Math.round(scores.execution * 100) / 100 : null;
-      fields.leadership_score  = scores.leadership  != null ? Math.round(scores.leadership * 100) / 100 : null;
-      fields.resilience_score  = scores.resilience  != null ? Math.round(scores.resilience * 100) / 100 : null;
-      fields.culture_score     = scores.culture     != null ? Math.round(scores.culture * 100) / 100 : null;
-      fields.maturity_label    = getMaturity(scores.opri);
+      fields.opri_score       = Math.round(scores.opri * 100) / 100;
+      fields.alignment_score  = scores.alignment   != null ? Math.round(scores.alignment * 100) / 100 : null;
+      fields.execution_score  = scores.execution   != null ? Math.round(scores.execution * 100) / 100 : null;
+      fields.leadership_score = scores.leadership  != null ? Math.round(scores.leadership * 100) / 100 : null;
+      fields.resilience_score = scores.resilience  != null ? Math.round(scores.resilience * 100) / 100 : null;
+      fields.culture_score    = scores.culture     != null ? Math.round(scores.culture * 100) / 100 : null;
+      fields.maturity_label   = getMaturity(scores.opri);
     }
 
-    // Remove null fields
     Object.keys(fields).forEach(k => { if (fields[k] == null) delete fields[k]; });
 
     const r = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(TABLE_NAME)}`, {
@@ -94,6 +94,26 @@ export default async function handler(req, res) {
     });
     const data = await r.json();
     if (!r.ok) return res.status(500).json({ error: data.error || "Airtable error" });
+
+    // Update response count on engagement
+    if (engagement_code) {
+      try {
+        const engData = await fetch(
+          `https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(ENG_TABLE)}?filterByFormula=engagement_code%3D%22${engagement_code}%22`,
+          { headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}` } }
+        ).then(r => r.json());
+        if (engData.records && engData.records.length > 0) {
+          const eng = engData.records[0];
+          const newCount = (eng.fields.response_count || 0) + 1;
+          await fetch(`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(ENG_TABLE)}/${eng.id}`, {
+            method: "PATCH",
+            headers: { "Authorization": `Bearer ${AIRTABLE_TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ fields: { response_count: newCount } })
+          });
+        }
+      } catch (e) { /* non-critical */ }
+    }
+
     res.status(200).json({ success: true, recordId: data.id });
   } catch (e) {
     res.status(500).json({ error: e.message });
