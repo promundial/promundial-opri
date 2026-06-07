@@ -351,34 +351,54 @@ const DEEP_MODULES = [
 const LEVELS = ["Comité Ejecutivo", "Directores/Gerentes", "Supervisores", "Colaboradores", "Otros"];
 const PAI_LEAD = ["Comité Ejecutivo", "Directores/Gerentes"];
 const PAI_ORG  = ["Supervisores", "Colaboradores", "Otros"];
-const API_BASE = typeof window !== "undefined" && window.location.hostname !== "localhost"
-  ? ""   // same origin on Vercel
-  : "http://localhost:3000";
+const STORAGE_KEY = "opri_enterprise_v3";
+const OLD_KEYS = ["opri_ent_v2", "opri_ent_v1", "opri_enterprise_v2"];
 
-// ── API / Airtable storage ────────────────────────────────────────────────────
+// ── Storage ───────────────────────────────────────────────────────────────────
 async function loadResponses() {
   try {
-    const r = await fetch(API_BASE + "/api/responses");
-    if (!r.ok) return [];
-    const data = await r.json();
-    return data.responses || [];
+    // Load from current key
+    let all = [];
+    const seenIds = new Set();
+
+    // Try current key
+    try {
+      const result = await window.storage.get(STORAGE_KEY, true);
+      if (result && result.value) {
+        const parsed = JSON.parse(result.value);
+        parsed.forEach(function(r) { if (!seenIds.has(r.id)) { seenIds.add(r.id); all.push(r); } });
+      }
+    } catch (e) {}
+
+    // Try old keys and merge
+    for (let i = 0; i < OLD_KEYS.length; i++) {
+      try {
+        const result = await window.storage.get(OLD_KEYS[i], true);
+        if (result && result.value) {
+          const parsed = JSON.parse(result.value);
+          parsed.forEach(function(r) { if (!seenIds.has(r.id)) { seenIds.add(r.id); all.push(r); } });
+        }
+      } catch (e) {}
+    }
+
+    // If we found data in old keys, migrate to new key
+    if (all.length > 0) {
+      try {
+        await window.storage.set(STORAGE_KEY, JSON.stringify(all), true);
+      } catch (e) {}
+    }
+
+    return all;
   } catch (err) {
-    console.error("Load error:", err);
     return [];
   }
 }
 
 async function saveResponse(resp) {
   try {
-    const r = await fetch(API_BASE + "/api/respond", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(resp),
-    });
-    if (!r.ok) {
-      const err = await r.json();
-      console.error("Save error:", err);
-    }
+    const existing = await loadResponses();
+    existing.push(resp);
+    await window.storage.set(STORAGE_KEY, JSON.stringify(existing), true);
   } catch (err) {
     console.error("Save error:", err);
   }
@@ -604,14 +624,19 @@ function LikertQuestion({ qid, text, value, color, onChange }) {
   );
 }
 
-function MetaForm({ onStart, title, subtitle }) {
-  const [meta, setMeta] = useState({ name: "", level: "", area: "", country: "", bu: "" });
+function MetaForm({ onStart, title, subtitle, presetCompany }) {
+  const [meta, setMeta] = useState({ company: presetCompany || "", name: "", level: "", area: "", country: "", bu: "" });
   function set(key, val) { setMeta(function(p) { const n = Object.assign({}, p); n[key] = val; return n; }); }
+  const canStart = meta.level && meta.company;
   return (
     <div>
       <SurveyHeader title={title} sub={subtitle} />
       <div style={{ padding: "20px 20px 28px", maxWidth: 500, margin: "0 auto" }}>
         <p style={{ fontSize: 13, color: MUTED, marginBottom: 18, lineHeight: 1.6 }}>Complete su información de perfil. Sus respuestas son confidenciales.</p>
+        <div style={{ marginBottom: 13 }}>
+          <label style={s.label}>Empresa *</label>
+          <input value={meta.company} onChange={function(e) { set("company", e.target.value); }} placeholder="Ej. Banco Pichincha" style={s.input} readOnly={!!presetCompany} />
+        </div>
         <div style={{ marginBottom: 13 }}>
           <label style={s.label}>Nombre (opcional)</label>
           <input value={meta.name} onChange={function(e) { set("name", e.target.value); }} placeholder="Ej. Juan Pérez" style={s.input} />
@@ -635,7 +660,7 @@ function MetaForm({ onStart, title, subtitle }) {
           <label style={s.label}>Unidad de Negocio</label>
           <input value={meta.bu} onChange={function(e) { set("bu", e.target.value); }} placeholder="Ej. División Retail" style={s.input} />
         </div>
-        <button disabled={!meta.level} onClick={function() { onStart(meta); }} style={btn(GREEN, !meta.level)}>Comenzar →</button>
+        <button disabled={!canStart} onClick={function() { onStart(meta); }} style={btn(GREEN, !canStart)}>Comenzar →</button>
       </div>
     </div>
   );
@@ -1137,7 +1162,40 @@ function RespondenteTable({ responses, dims }) {
 }
 
 // ── Results panel with cascade tabs ──────────────────────────────────────────
+function CompanySelector({ responses, selected, onSelect }) {
+  const companies = [];
+  responses.forEach(function(r) {
+    if (r.meta && r.meta.company && companies.indexOf(r.meta.company) < 0) {
+      companies.push(r.meta.company);
+    }
+  });
+  if (companies.length === 0) return null;
+  return (
+    <div style={{ padding: "12px 16px", background: WHITE, borderBottom: "1px solid " + CREAM_DK, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>Empresa:</span>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <button onClick={function() { onSelect("ALL"); }} style={{ padding: "4px 12px", borderRadius: 99, border: selected === "ALL" ? "2px solid " + GREEN : "1px solid " + CREAM_DK, background: selected === "ALL" ? GREEN + "18" : WHITE, color: selected === "ALL" ? GREEN : MUTED, fontSize: 11, fontWeight: selected === "ALL" ? 700 : 400, cursor: "pointer", fontFamily: "inherit" }}>Todas</button>
+        {companies.map(function(c) {
+          return (
+            <button key={c} onClick={function() { onSelect(c); }} style={{ padding: "4px 12px", borderRadius: 99, border: selected === c ? "2px solid " + GREEN : "1px solid " + CREAM_DK, background: selected === c ? GREEN + "18" : WHITE, color: selected === c ? GREEN : MUTED, fontSize: 11, fontWeight: selected === c ? 700 : 400, cursor: "pointer", fontFamily: "inherit" }}>{c}</button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ResultsPanel({ responses, coreScores, fullScores, l2, l3, activeMods }) {
+  const [selectedCompany, setSelectedCompany] = useState("ALL");
+  const filteredResponses = selectedCompany === "ALL" ? responses : responses.filter(function(r) { return r.meta && r.meta.company === selectedCompany; });
+  const fCoreRR = filteredResponses.filter(function(r) { return r.survey === "core"; });
+  const fFullRR = filteredResponses.filter(function(r) { return r.survey === "full"; });
+  const fCoreScores = computeOPRI(fCoreRR, CORE_DIMS);
+  const fFullScores = computeOPRI(fFullRR, FULL_DIMS);
+  const fL2 = checkL2(fCoreScores);
+  const fL3 = checkL3(fFullScores);
+  const fActiveMods = DEEP_MODULES.filter(function(m) { return fL3.mods.indexOf(m.id) >= 0; });
+
   const tabs = [
     { id: "core_opri", label: "Core OPRI", sub: "L1" },
     { id: "core_pai",  label: "Core PAI",  sub: "L1" },
@@ -1148,32 +1206,33 @@ function ResultsPanel({ responses, coreScores, fullScores, l2, l3, activeMods })
     tabs.push({ id: "full_pai",  label: "Full PAI",  sub: "L2" });
     tabs.push({ id: "full_heat", label: "Full Maps", sub: "L2" });
   }
-  activeMods.forEach(function(m) { tabs.push({ id: "deep_" + m.id, label: m.index, sub: "L3", mod: m }); });
+  fActiveMods.forEach(function(m) { tabs.push({ id: "deep_" + m.id, label: m.index, sub: "L3", mod: m }); });
 
   const [activeTab, setActiveTab] = useState(tabs[0] ? tabs[0].id : "core_opri");
 
   function renderContent() {
-    if (activeTab === "core_opri") return <OPRIDash tag="core" title="OPRI Core 25" dims={CORE_DIMS} responses={responses} />;
-    if (activeTab === "core_pai")  return <PAIDash  tag="core" title="OPRI Core"    dims={CORE_DIMS} responses={responses} />;
-    if (activeTab === "core_heat") return <HeatView tag="core" dims={CORE_DIMS} responses={responses} />;
-    if (activeTab === "full_opri") return <OPRIDash tag="full" title="OPRI Full 60" dims={FULL_DIMS} responses={responses} />;
-    if (activeTab === "full_pai")  return <PAIDash  tag="full" title="OPRI Full"    dims={FULL_DIMS} responses={responses} />;
-    if (activeTab === "full_heat") return <HeatView tag="full" dims={FULL_DIMS} responses={responses} />;
+    if (activeTab === "core_opri") return <OPRIDash tag="core" title="OPRI Core 25" dims={CORE_DIMS} responses={filteredResponses} />;
+    if (activeTab === "core_pai")  return <PAIDash  tag="core" title="OPRI Core"    dims={CORE_DIMS} responses={filteredResponses} />;
+    if (activeTab === "core_heat") return <HeatView tag="core" dims={CORE_DIMS} responses={filteredResponses} />;
+    if (activeTab === "full_opri") return <OPRIDash tag="full" title="OPRI Full 60" dims={FULL_DIMS} responses={filteredResponses} />;
+    if (activeTab === "full_pai")  return <PAIDash  tag="full" title="OPRI Full"    dims={FULL_DIMS} responses={filteredResponses} />;
+    if (activeTab === "full_heat") return <HeatView tag="full" dims={FULL_DIMS} responses={filteredResponses} />;
     const t = tabs.find(function(t) { return t.id === activeTab; });
-    if (t && t.mod) return <DeepDash mod={t.mod} responses={responses} />;
+    if (t && t.mod) return <DeepDash mod={t.mod} responses={filteredResponses} />;
     return null;
   }
 
   return (
     <div>
+      <CompanySelector responses={responses} selected={selectedCompany} onSelect={setSelectedCompany} />
       <div style={{ padding: "10px 16px", background: WHITE, borderBottom: "1px solid " + CREAM_DK, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <CascadeStatusNode label="Core" score={coreScores ? coreScores.opri : null} n={responses.filter(function(r) { return r.survey === "core"; }).length} color={GREEN} />
-        <span style={{ fontSize: 12, color: l2.active ? AMBER : MUTED_LT }}>{"→"}</span>
-        <CascadeStatusNode label="Full" score={fullScores ? fullScores.opri : null} n={responses.filter(function(r) { return r.survey === "full"; }).length} color={GREEN_MID} locked={!coreScores || !l2.active} />
-        {activeMods.length > 0 && (
+        <CascadeStatusNode label="Core" score={fCoreScores ? fCoreScores.opri : null} n={fCoreRR.length} color={GREEN} />
+        <span style={{ fontSize: 12, color: fL2.active ? AMBER : MUTED_LT }}>{"→"}</span>
+        <CascadeStatusNode label="Full" score={fFullScores ? fFullScores.opri : null} n={fFullRR.length} color={GREEN_MID} locked={!fCoreScores || !fL2.active} />
+        {fActiveMods.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ fontSize: 12, color: VIOLET }}>{"→"}</span>
-            {activeMods.map(function(m) { return <span key={m.id} style={{ fontSize: 10, color: m.color, background: m.color + "18", padding: "2px 6px", borderRadius: 99, fontWeight: 700 }}>{m.index}</span>; })}
+            {fActiveMods.map(function(m) { return <span key={m.id} style={{ fontSize: 10, color: m.color, background: m.color + "18", padding: "2px 6px", borderRadius: 99, fontWeight: 700 }}>{m.index}</span>; })}
           </div>
         )}
       </div>
