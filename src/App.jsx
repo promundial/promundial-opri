@@ -351,58 +351,64 @@ const DEEP_MODULES = [
 const LEVELS = ["Comité Ejecutivo", "Directores/Gerentes", "Supervisores", "Colaboradores", "Otros"];
 const PAI_LEAD = ["Comité Ejecutivo", "Directores/Gerentes"];
 const PAI_ORG  = ["Supervisores", "Colaboradores", "Otros"];
-const STORAGE_KEY = "opri_enterprise_v3";
-const OLD_KEYS = ["opri_ent_v2", "opri_ent_v1", "opri_enterprise_v2"];
+const API_BASE = "";
+const ADMIN_PASS_KEY = "opri_admin_pw";
 
-// ── Storage ───────────────────────────────────────────────────────────────────
-async function loadResponses() {
+// ── API / Airtable ──────────────────────────────────────────────────────────
+async function loadResponses(engCode) {
   try {
-    // Load from current key
-    let all = [];
-    const seenIds = new Set();
-
-    // Try current key
-    try {
-      const result = await window.storage.get(STORAGE_KEY, true);
-      if (result && result.value) {
-        const parsed = JSON.parse(result.value);
-        parsed.forEach(function(r) { if (!seenIds.has(r.id)) { seenIds.add(r.id); all.push(r); } });
-      }
-    } catch (e) {}
-
-    // Try old keys and merge
-    for (let i = 0; i < OLD_KEYS.length; i++) {
-      try {
-        const result = await window.storage.get(OLD_KEYS[i], true);
-        if (result && result.value) {
-          const parsed = JSON.parse(result.value);
-          parsed.forEach(function(r) { if (!seenIds.has(r.id)) { seenIds.add(r.id); all.push(r); } });
-        }
-      } catch (e) {}
-    }
-
-    // If we found data in old keys, migrate to new key
-    if (all.length > 0) {
-      try {
-        await window.storage.set(STORAGE_KEY, JSON.stringify(all), true);
-      } catch (e) {}
-    }
-
-    return all;
-  } catch (err) {
-    return [];
-  }
+    const url = engCode ? "/api/responses?engagement_code=" + engCode : "/api/responses";
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return data.responses || [];
+  } catch (err) { return []; }
 }
-
 async function saveResponse(resp) {
   try {
-    const existing = await loadResponses();
-    existing.push(resp);
-    await window.storage.set(STORAGE_KEY, JSON.stringify(existing), true);
-  } catch (err) {
-    console.error("Save error:", err);
-  }
+    await fetch("/api/respond", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(resp),
+    });
+  } catch (err) { console.error("Save error:", err); }
 }
+async function apiLoadEngagements(pw) {
+  try {
+    const r = await fetch("/api/engagements", { headers: { "x-admin-password": pw } });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.engagements || [];
+  } catch (e) { return null; }
+}
+async function apiCreateEngagement(pw, payload) {
+  try {
+    const r = await fetch("/api/engagements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-admin-password": pw },
+      body: JSON.stringify(payload),
+    });
+    return r.json();
+  } catch (e) { return { error: e.message }; }
+}
+async function apiUpdateEngagement(pw, payload) {
+  try {
+    const r = await fetch("/api/engagements", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-admin-password": pw },
+      body: JSON.stringify(payload),
+    });
+    return r.json();
+  } catch (e) { return { error: e.message }; }
+}
+async function apiGetEngagement(code) {
+  try {
+    const r = await fetch("/api/engagements?code=" + code);
+    if (!r.ok) return null;
+    return r.json();
+  } catch (e) { return null; }
+}
+
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
 function computeOPRI(responses, dims) {
@@ -681,7 +687,7 @@ function DoneScreen({ title, color, onBack, onNew }) {
 }
 
 // ── OPRI Survey (Core & Full) ─────────────────────────────────────────────────
-function OPRISurvey({ level, onDone, onBack }) {
+function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany }) {
   const isCore = level === "core";
   const dims = isCore ? CORE_DIMS : FULL_DIMS;
   const allQs = [];
@@ -695,7 +701,7 @@ function OPRISurvey({ level, onDone, onBack }) {
   async function submit() {
     setSaving(true);
     const id = "R_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
-    await saveResponse({ id: id, timestamp: new Date().toISOString(), survey: level, meta: meta, answers: answers });
+    await saveResponse({ id: id, timestamp: new Date().toISOString(), survey: level, meta: meta, answers: answers, engagement_code: engagementCode || "" });
     setSaving(false);
     setDone(true);
     onDone();
@@ -705,7 +711,7 @@ function OPRISurvey({ level, onDone, onBack }) {
     return <DoneScreen title={isCore ? "OPRI Core 25" : "OPRI Full 60"} color={GREEN} onBack={onBack} onNew={function() { setMeta(null); setDimIdx(0); setAnswers({}); setDone(false); }} />;
   }
   if (!meta) {
-    return <MetaForm title={isCore ? "OPRI Core 25" : "OPRI Full 60"} subtitle={isCore ? "25 preguntas · ~8 min" : "60 preguntas · ~18 min"} onStart={setMeta} />;
+    return <MetaForm title={isCore ? "OPRI Core 25" : "OPRI Full 60"} subtitle={isCore ? "25 preguntas · ~8 min" : "60 preguntas · ~18 min"} onStart={setMeta} presetCompany={presetCompany} />;
   }
 
   const dim = dims[dimIdx];
@@ -1185,7 +1191,7 @@ function CompanySelector({ responses, selected, onSelect }) {
   );
 }
 
-function ResultsPanel({ responses, coreScores, fullScores, l2, l3, activeMods }) {
+function ResultsPanel({ responses, coreScores, fullScores, l2, l3, activeMods, hideCompanySelector }) {
   const [selectedCompany, setSelectedCompany] = useState("ALL");
   const filteredResponses = selectedCompany === "ALL" ? responses : responses.filter(function(r) { return r.meta && r.meta.company === selectedCompany; });
   const fCoreRR = filteredResponses.filter(function(r) { return r.survey === "core"; });
@@ -1224,7 +1230,7 @@ function ResultsPanel({ responses, coreScores, fullScores, l2, l3, activeMods })
 
   return (
     <div>
-      <CompanySelector responses={responses} selected={selectedCompany} onSelect={setSelectedCompany} />
+      {!hideCompanySelector && <CompanySelector responses={responses} selected={selectedCompany} onSelect={setSelectedCompany} />}
       <div style={{ padding: "10px 16px", background: WHITE, borderBottom: "1px solid " + CREAM_DK, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <CascadeStatusNode label="Core" score={fCoreScores ? fCoreScores.opri : null} n={fCoreRR.length} color={GREEN} />
         <span style={{ fontSize: 12, color: fL2.active ? AMBER : MUTED_LT }}>{"→"}</span>
@@ -1349,6 +1355,304 @@ function HomeScreen({ responses, coreScores, fullScores, l2, l3, activeMods, dee
   );
 }
 
+// ── Admin Panel ──────────────────────────────────────────────────────────────
+function AdminLogin({ onAuth }) {
+  const [pw, setPw] = useState("");
+  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(false);
+  async function tryLogin() {
+    setLoading(true); setError(false);
+    const engs = await apiLoadEngagements(pw);
+    if (engs !== null) { onAuth(pw); }
+    else { setError(true); }
+    setLoading(false);
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 24 }}>
+      <div style={{ background: WHITE, borderRadius: 14, padding: "32px 28px", maxWidth: 360, width: "100%", boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, color: GREEN, marginBottom: 4 }}>OPRI™ Admin</div>
+        <div style={{ fontSize: 12, color: MUTED, marginBottom: 24 }}>Promundial Consulting Group</div>
+        <label style={s.label}>Contraseña</label>
+        <input type="password" value={pw} onChange={function(e) { setPw(e.target.value); setError(false); }} onKeyDown={function(e) { if (e.key === "Enter") tryLogin(); }} placeholder="••••••••" style={Object.assign({}, s.input, { marginBottom: 8 })} />
+        {error && <div style={{ fontSize: 12, color: RED, marginBottom: 8 }}>Contraseña incorrecta.</div>}
+        <button onClick={tryLogin} disabled={!pw || loading} style={Object.assign({}, btn(GREEN, !pw || loading), { width: "100%", marginTop: 8 })}>{loading ? "Verificando…" : "Ingresar"}</button>
+      </div>
+    </div>
+  );
+}
+
+function AdminPanel({ password, onExit }) {
+  const [engagements, setEngagements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ company: "", consultant: "", close_date: "" });
+  const [savingNew, setSavingNew] = useState(false);
+  const [selectedEng, setSelectedEng] = useState(null);
+  const [engResponses, setEngResponses] = useState([]);
+  const [loadingResults, setLoadingResults] = useState(false);
+
+  async function reload() {
+    setLoading(true);
+    const data = await apiLoadEngagements(password);
+    if (data) setEngagements(data);
+    setLoading(false);
+  }
+  useEffect(function() { reload(); }, []);
+
+  async function handleCreate() {
+    if (!form.company || !form.consultant) return;
+    setSavingNew(true);
+    const result = await apiCreateEngagement(password, { company: form.company, consultant: form.consultant, close_date: form.close_date || undefined });
+    if (result.success) { setForm({ company: "", consultant: "", close_date: "" }); setCreating(false); await reload(); }
+    setSavingNew(false);
+  }
+
+  async function handleClose(eng) {
+    await apiUpdateEngagement(password, { id: eng.id, status: "closed" });
+    await reload();
+  }
+
+  async function handleReopen(eng) {
+    await apiUpdateEngagement(password, { id: eng.id, status: "active" });
+    await reload();
+  }
+
+  async function viewResults(eng) {
+    setSelectedEng(eng);
+    setLoadingResults(true);
+    const data = await loadResponses(eng.code);
+    setEngResponses(data);
+    setLoadingResults(false);
+  }
+
+  if (selectedEng) {
+    const coreRR = engResponses.filter(function(r) { return r.survey === "core"; });
+    const fullRR = engResponses.filter(function(r) { return r.survey === "full"; });
+    const coreScores = computeOPRI(coreRR, CORE_DIMS);
+    const fullScores = computeOPRI(fullRR, FULL_DIMS);
+    const l2 = checkL2(coreScores);
+    const l3 = checkL3(fullScores);
+    const activeMods = DEEP_MODULES.filter(function(m) { return l3.mods.indexOf(m.id) >= 0; });
+    return (
+      <div style={{ fontFamily: "'Jost', sans-serif", background: CREAM, minHeight: "100vh" }}>
+        <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');"}</style>
+        <div style={{ background: GREEN, padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid " + GOLD }}>
+          <div>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, color: WHITE, fontWeight: 600 }}>{selectedEng.company}</div>
+            <div style={{ fontSize: 9, color: GOLD, textTransform: "uppercase", letterSpacing: "0.1em" }}>OPRI™ Resultados · {selectedEng.code}</div>
+          </div>
+          <button onClick={function() { setSelectedEng(null); setEngResponses([]); }} style={Object.assign({}, btn(MUTED, false), { fontSize: 11 })}>← Volver</button>
+        </div>
+        {loadingResults ? <div style={{ padding: 40, textAlign: "center", color: MUTED }}>Cargando resultados…</div> : (
+          <ResultsPanel responses={engResponses} coreScores={coreScores} fullScores={fullScores} l2={l2} l3={l3} activeMods={activeMods} hideCompanySelector={true} />
+        )}
+      </div>
+    );
+  }
+
+  const active = engagements.filter(function(e) { return e.status === "active"; });
+  const closed = engagements.filter(function(e) { return e.status === "closed"; });
+
+  return (
+    <div style={{ fontFamily: "'Jost', sans-serif", background: CREAM, minHeight: "100vh" }}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');"}</style>
+      <div style={{ background: GREEN, padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid " + GOLD }}>
+        <div>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, color: WHITE, fontWeight: 600 }}>OPRI™ Admin</div>
+          <div style={{ fontSize: 9, color: GOLD, textTransform: "uppercase", letterSpacing: "0.1em" }}>Promundial Consulting Group</div>
+        </div>
+        <button onClick={onExit} style={Object.assign({}, btn(MUTED, false), { fontSize: 11 })}>Salir</button>
+      </div>
+
+      <div style={{ padding: "22px 18px", maxWidth: 700, margin: "0 auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN }}>Engagements</div>
+          <button onClick={function() { setCreating(true); }} style={btn(GREEN, false)}>+ Nuevo engagement</button>
+        </div>
+
+        {creating && (
+          <div style={{ background: WHITE, borderRadius: 12, padding: "20px", border: "2px solid " + GREEN + "44", marginBottom: 18 }}>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, color: GREEN, marginBottom: 16 }}>Nuevo Engagement</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div>
+                <label style={s.label}>Empresa *</label>
+                <input value={form.company} onChange={function(e) { setForm(function(p) { return Object.assign({}, p, { company: e.target.value }); }); }} placeholder="Ej. Banco Pichincha" style={s.input} />
+              </div>
+              <div>
+                <label style={s.label}>Consultor *</label>
+                <input value={form.consultant} onChange={function(e) { setForm(function(p) { return Object.assign({}, p, { consultant: e.target.value }); }); }} placeholder="Ej. José Ricardo" style={s.input} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={s.label}>Fecha de cierre (opcional)</label>
+              <input type="date" value={form.close_date} onChange={function(e) { setForm(function(p) { return Object.assign({}, p, { close_date: e.target.value }); }); }} style={s.input} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={handleCreate} disabled={!form.company || !form.consultant || savingNew} style={btn(GREEN, !form.company || !form.consultant || savingNew)}>{savingNew ? "Creando…" : "Crear engagement"}</button>
+              <button onClick={function() { setCreating(false); }} style={btn(MUTED, false)}>Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {loading ? <div style={{ padding: 32, textAlign: "center", color: MUTED }}>Cargando…</div> : (
+          <div>
+            {active.length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <SectionHeader title={"Activos (" + active.length + ")"} color={GREEN} />
+                {active.map(function(eng) { return <EngCard key={eng.id} eng={eng} onClose={handleClose} onResults={viewResults} password={password} onReload={reload} />; })}
+              </div>
+            )}
+            {closed.length > 0 && (
+              <div>
+                <SectionHeader title={"Cerrados (" + closed.length + ")"} color={MUTED} />
+                {closed.map(function(eng) { return <EngCard key={eng.id} eng={eng} onReopen={handleReopen} onResults={viewResults} closed={true} />; })}
+              </div>
+            )}
+            {engagements.length === 0 && (
+              <div style={{ padding: 40, textAlign: "center", color: MUTED_LT }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>◎</div>
+                <div>No hay engagements aún. Crea el primero.</div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EngCard({ eng, onClose, onReopen, onResults, closed, password, onReload }) {
+  const surveyUrl = window.location.origin + "/e/" + eng.code;
+  const [copied, setCopied] = useState(false);
+  function copyLink() {
+    navigator.clipboard.writeText(surveyUrl);
+    setCopied(true);
+    setTimeout(function() { setCopied(false); }, 2000);
+  }
+  const isExpired = eng.close_date && new Date(eng.close_date) < new Date();
+  return (
+    <div style={{ background: WHITE, borderRadius: 10, padding: "14px 16px", border: "1px solid " + CREAM_DK, marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+            <span style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, color: GREEN, fontWeight: 600 }}>{eng.company}</span>
+            <span style={{ fontSize: 9, background: closed ? MUTED + "18" : GREEN + "18", color: closed ? MUTED : GREEN, padding: "2px 7px", borderRadius: 99, fontWeight: 700, textTransform: "uppercase" }}>{closed ? "Cerrado" : isExpired ? "Expirado" : "Activo"}</span>
+          </div>
+          <div style={{ fontSize: 12, color: MUTED, marginBottom: 6 }}>
+            Consultor: {eng.consultant} · Código: <span style={{ fontFamily: "monospace", color: CHARCOAL }}>{eng.code}</span> · {eng.response_count || 0} respuestas
+          </div>
+          {!closed && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 11, color: MUTED_LT, fontFamily: "monospace" }}>{surveyUrl}</span>
+              <button onClick={copyLink} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: copied ? GREEN : MUTED }}>{copied ? "✓ Copiado" : "Copiar"}</button>
+            </div>
+          )}
+          {eng.close_date && <div style={{ fontSize: 11, color: MUTED_LT, marginTop: 3 }}>Cierre: {new Date(eng.close_date).toLocaleDateString("es-ES")}</div>}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button onClick={function() { onResults(eng); }} style={Object.assign({}, btn(BLUE, false), { fontSize: 11, padding: "7px 14px" })}>Ver resultados</button>
+          {!closed && <button onClick={function() { onClose(eng); }} style={Object.assign({}, btn(RED, false), { fontSize: 11, padding: "7px 14px" })}>Cerrar</button>}
+          {closed && onReopen && <button onClick={function() { onReopen(eng); }} style={Object.assign({}, btn(MUTED, false), { fontSize: 11, padding: "7px 14px" })}>Reabrir</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Engagement Survey (public URL /e/:code) ───────────────────────────────────
+function EngagementSurveyPage({ code }) {
+  const [engagement, setEngagement] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeSurvey, setActiveSurvey] = useState(null);
+  const [responses, setResponses] = useState([]);
+
+  useEffect(function() {
+    async function init() {
+      const eng = await apiGetEngagement(code);
+      setEngagement(eng);
+      if (eng && eng.status === "active") {
+        const data = await loadResponses(code);
+        setResponses(data);
+      }
+      setLoading(false);
+    }
+    init();
+  }, [code]);
+
+  async function handleDone() {
+    const data = await loadResponses(code);
+    setResponses(data);
+    setActiveSurvey(null);
+  }
+
+  if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM }}><div style={{ textAlign: "center", color: MUTED }}><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 24, color: GREEN, marginBottom: 6 }}>OPRI™</div><div>Cargando…</div></div></div>;
+
+  if (!engagement) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 24 }}>
+      <div style={{ textAlign: "center", maxWidth: 320 }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 8 }}>Encuesta no encontrada</div>
+        <div style={{ fontSize: 13, color: MUTED }}>El código de encuesta no existe o ha expirado.</div>
+      </div>
+    </div>
+  );
+
+  const isExpired = engagement.close_date && new Date(engagement.close_date) < new Date();
+  if (engagement.status === "closed" || isExpired) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 24 }}>
+      <div style={{ textAlign: "center", maxWidth: 340 }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>✓</div>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 8 }}>Esta encuesta ha cerrado</div>
+        <div style={{ fontSize: 13, color: MUTED }}>Gracias por su participación. Los resultados están siendo procesados por el equipo de Promundial.</div>
+      </div>
+    </div>
+  );
+
+  const coreRR = responses.filter(function(r) { return r.survey === "core"; });
+  const fullRR = responses.filter(function(r) { return r.survey === "full"; });
+  const coreScores = computeOPRI(coreRR, CORE_DIMS);
+  const fullScores = computeOPRI(fullRR, FULL_DIMS);
+  const l2 = checkL2(coreScores);
+
+  function renderSurvey() {
+    if (!activeSurvey) {
+      return (
+        <div style={{ padding: "22px 18px", maxWidth: 540, margin: "0 auto" }}>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 4 }}>{engagement.company}</div>
+          <div style={{ fontSize: 12, color: MUTED, marginBottom: 20 }}>OPRI™ Core Survey · Complete su diagnóstico</div>
+          <SurveyCard level="Level 1" badge={coreRR.length > 0 ? coreRR.length + " resp." : "Iniciar"} label="OPRI Core 25" desc="Diagnóstico rápido · 25 preguntas · ~8 min" color={GREEN} status="available" onClick={function() { setActiveSurvey({ id: "core" }); }} />
+          {coreRR.length > 0 && l2.active && (
+            <SurveyCard level="Level 2" badge={fullRR.length > 0 ? fullRR.length + " resp." : "Activado"} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status="activated" triggers={l2.reasons.slice(0, 2)} onClick={function() { setActiveSurvey({ id: "full" }); }} />
+          )}
+          {coreRR.length > 0 && !l2.active && (
+            <div style={{ padding: "13px 14px", background: "#DCFCE7", borderRadius: 9, border: "1px solid " + GREEN_LT + "55", marginTop: 8 }}>
+              <div style={{ fontSize: 11, color: GREEN, fontWeight: 700, marginBottom: 2 }}>✓ Diagnóstico Core completo</div>
+              <div style={{ fontSize: 12, color: GREEN_MID }}>Sus resultados han sido registrados. Gracias por participar.</div>
+            </div>
+          )}
+        </div>
+      );
+    }
+    if (activeSurvey.id === "core") return <OPRISurvey level="core" engagementCode={code} presetCompany={engagement.company} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
+    if (activeSurvey.id === "full") return <OPRISurvey level="full" engagementCode={code} presetCompany={engagement.company} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
+    return null;
+  }
+
+  return (
+    <div style={{ fontFamily: "'Jost', sans-serif", background: CREAM, minHeight: "100vh", maxWidth: 800, margin: "0 auto" }}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');"}</style>
+      <div style={{ background: GREEN, padding: "12px 18px", borderBottom: "2px solid " + GOLD }}>
+        <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, color: WHITE, fontWeight: 600 }}>OPRI™</div>
+        <div style={{ fontSize: 9, color: GOLD, textTransform: "uppercase", letterSpacing: "0.1em" }}>Enterprise Edition · Promundial</div>
+      </div>
+      {renderSurvey()}
+      <div style={{ padding: "12px", textAlign: "center", borderTop: "1px solid " + CREAM_DK, marginTop: 16 }}>
+        <span style={{ fontSize: 9, color: MUTED_LT, letterSpacing: "0.08em" }}>{"OPRI™ ENTERPRISE EDITION · PROMUNDIAL CONSULTING GROUP · " + new Date().getFullYear()}</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Demo data generator ──────────────────────────────────────────────────────
 function makeDemoAnswers(dims, low) {
   const answers = {};
@@ -1373,6 +1677,16 @@ function generateDemoData() {
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
+  // ── Routing ──────────────────────────────────────────────────────────────────
+  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+  const engCode = (function() { const m = path.match(/^\/e\/([a-z0-9]+)$/); return m ? m[1] : null; })();
+  const [adminPassword, setAdminPassword] = useState(null);
+  if (engCode) return <EngagementSurveyPage code={engCode} />;
+  if (path === "/admin") {
+    if (!adminPassword) return <AdminLogin onAuth={setAdminPassword} />;
+    return <AdminPanel password={adminPassword} onExit={function() { setAdminPassword(null); window.history.pushState({}, "", "/"); window.location.reload(); }} />;
+  }
+
   const [responses, setResponses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState("home");
@@ -1390,11 +1704,9 @@ export default function App() {
 
   async function loadDemoData() {
     const demo = generateDemoData();
-    try { await window.storage.set(STORAGE_KEY, JSON.stringify(demo), true); } catch(e) {}
     setResponses(demo);
   }
   async function clearData() {
-    try { await window.storage.set(STORAGE_KEY, JSON.stringify([]), true); } catch(e) {}
     setResponses([]);
   }
 
