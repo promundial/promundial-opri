@@ -64,6 +64,7 @@ export default async function handler(req, res) {
       response_id:         id,
       survey:              survey,
       timestamp:           timestamp || new Date().toISOString(),
+      respondent_company:  meta.company || "",
       respondent_name:     meta.name || "",
       respondent_level:    meta.level || "",
       respondent_area:     meta.area || "",
