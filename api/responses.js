@@ -30,6 +30,7 @@ export default async function handler(req, res) {
         survey:    rec.fields.survey,
         timestamp: rec.fields.timestamp,
         meta: {
+          company: rec.fields.respondent_company,
           name:    rec.fields.respondent_name,
           level:   rec.fields.respondent_level,
           area:    rec.fields.respondent_area,
