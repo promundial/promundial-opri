@@ -1,4 +1,4 @@
-// api/responses.js — lee todas las respuestas de Airtable
+// api/responses.js — lee respuestas de Airtable, con filtro opcional por engagement_code
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
 const BASE_ID = process.env.AIRTABLE_BASE_ID;
 const TABLE_NAME = "Responses";
@@ -6,17 +6,19 @@ const TABLE_NAME = "Responses";
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", process.env.ALLOWED_ORIGIN || "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-admin-password");
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
   try {
+    const engCode = req.query.engagement_code;
     let all = [], offset = null;
     do {
       const url = new URL(`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(TABLE_NAME)}`);
       url.searchParams.set("pageSize", "100");
       url.searchParams.set("sort[0][field]", "timestamp");
-      url.searchParams.set("sort[0][direction]", "desc");
+      url.searchParams.set("sort[0][direction]", "asc");
+      if (engCode) url.searchParams.set("filterByFormula", `engagement_code="${engCode}"`);
       if (offset) url.searchParams.set("offset", offset);
 
       const r = await fetch(url.toString(), {
@@ -27,6 +29,7 @@ export default async function handler(req, res) {
 
       all = all.concat(data.records.map(rec => ({
         id:        rec.fields.response_id,
+        engagement_code: rec.fields.engagement_code,
         survey:    rec.fields.survey,
         timestamp: rec.fields.timestamp,
         meta: {
@@ -37,7 +40,7 @@ export default async function handler(req, res) {
           country: rec.fields.respondent_country,
           bu:      rec.fields.respondent_bu,
         },
-        answers:   rec.fields.answers_json ? JSON.parse(rec.fields.answers_json) : {},
+        answers: rec.fields.answers_json ? JSON.parse(rec.fields.answers_json) : {},
         scores: {
           opri:       rec.fields.opri_score,
           alignment:  rec.fields.alignment_score,
