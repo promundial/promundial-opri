@@ -711,12 +711,6 @@ function clearSavedMeta() {
 function loadCompletedSurveys() {
   try { var v = localStorage.getItem(DONE_KEY); return v ? JSON.parse(v) : []; } catch (e) { return []; }
 }
-function markSurveyDone(surveyId) {
-  try {
-    var done = loadCompletedSurveys();
-    if (done.indexOf(surveyId) < 0) { done.push(surveyId); localStorage.setItem(DONE_KEY, JSON.stringify(done)); }
-  } catch (e) {}
-}
 
 // ── OPRI Survey (Core & Full) ─────────────────────────────────────────────────
 function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inheritedMeta, onMetaSaved, onSurveyDone, savedProgress, onProgress, onClearProgress, onLogout }) {
@@ -728,7 +722,7 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
   // Restore from saved progress or use inheritedMeta
   var storedMeta = loadSavedMeta();
   var initialMeta = isCore ? (savedProgress && savedProgress.meta ? savedProgress.meta : null) : (inheritedMeta || storedMeta || (savedProgress && savedProgress.meta) || null);
-  var initialDimIdx = savedProgress && savedProgress.dimIdx != null ? savedProgress.dimIdx : 0;
+  var initialDimIdx = (savedProgress && savedProgress.dimIdx != null && savedProgress.dimIdx < (isCore ? CORE_DIMS : FULL_DIMS).length) ? savedProgress.dimIdx : 0;
   var initialAnswers = savedProgress && savedProgress.answers ? savedProgress.answers : {};
 
   const [meta, setMeta] = useState(initialMeta);
@@ -762,6 +756,11 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
     if (onProgress) onProgress({ meta: meta, dimIdx: newDimIdx, answers: newAnswers || answers });
   }
 
+  // Auto-save (must be before ALL early returns — React rules of hooks)
+  useEffect(function() {
+    if (meta && onProgress) onProgress({ meta: meta, dimIdx: dimIdx, answers: answers });
+  }, [answers, dimIdx]);
+
   if (done) {
     return <DoneScreen title={isCore ? "OPRI Core 25" : "OPRI Full 60"} color={GREEN} onBack={onBack} onNew={function() { clearSavedMeta(); setMeta(null); setDimIdx(0); setAnswers({}); setDone(false); }} />;
   }
@@ -773,11 +772,6 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
   const dimDone = dim.questions.every(function(q) { return answers[q.id] != null; });
   const answered = allQs.filter(function(q) { return answers[q.id] != null; }).length;
   const pct = (answered / allQs.length) * 100;
-
-  // Auto-save on every answer change
-  useEffect(function() {
-    if (meta && onProgress) onProgress({ meta: meta, dimIdx: dimIdx, answers: answers });
-  }, [answers]);
 
   return (
     <div>
@@ -827,22 +821,22 @@ function DeepSurvey({ mod, onDone, onBack, engagementCode, inheritedMeta, onSurv
     onDone();
   }
 
+  // Auto-save (must be before ALL early returns — React rules of hooks)
+  useEffect(function() {
+    if (meta && onProgress) onProgress({ meta: meta, groupIdx: groupIdx, answers: answers });
+  }, [answers, groupIdx]);
+
   if (done) {
     return <DoneScreen title={mod.fullName} color={mod.color} onBack={onBack} onNew={function() { clearSavedMeta(); setMeta(null); setGroupIdx(0); setAnswers({}); setDone(false); }} />;
   }
   if (!meta) {
-    return <MetaForm title={mod.index + " — " + mod.name} subtitle={mod.fullName + " · " + allQs.length + " preguntas"} onStart={function(m) { saveMeta(m); setMeta(m); }} />;
+    return <MetaForm title={mod.index + " — " + mod.name} subtitle={mod.fullName + " · " + allQs.length + " preguntas"} onStart={function(m) { saveMeta(m); setMeta(m); if (onProgress) onProgress({ meta: m, groupIdx: 0, answers: {} }); }} />;
   }
 
   const grp = mod.groups[groupIdx];
   const grpDone = grp.qs.every(function(q) { return answers[q.id] != null; });
   const answered = allQs.filter(function(q) { return answers[q.id] != null; }).length;
   const pct = (answered / allQs.length) * 100;
-
-  // Auto-save on every answer change
-  useEffect(function() {
-    if (meta && onProgress) onProgress({ meta: meta, groupIdx: groupIdx, answers: answers });
-  }, [answers, groupIdx]);
 
   return (
     <div>
@@ -2692,17 +2686,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
 
 // ── Main App ──────────────────────────────────────────────────────────────────
-export default function App() {
-  // ── Routing ──────────────────────────────────────────────────────────────────
-  const path = typeof window !== "undefined" ? window.location.pathname : "/";
-  const engCode = (function() { const m = path.match(/^\/e\/([a-z0-9]+)$/); return m ? m[1] : null; })();
-  const [adminPassword, setAdminPassword] = useState(null);
-  if (engCode) return <EngagementSurveyPage code={engCode} />;
-  if (path === "/admin") {
-    if (!adminPassword) return <AdminLogin onAuth={setAdminPassword} />;
-    return <AdminPanel password={adminPassword} onExit={function() { setAdminPassword(null); }} />;
-  }
-
+function PublicApp() {
   const [responses, setResponses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState("home");
@@ -2816,4 +2800,18 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+function AdminApp() {
+  const [adminPassword, setAdminPassword] = useState(null);
+  if (!adminPassword) return <AdminLogin onAuth={setAdminPassword} />;
+  return <AdminPanel password={adminPassword} onExit={function() { setAdminPassword(null); }} />;
+}
+
+export default function App() {
+  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+  const engCode = (function() { const m = path.match(/^\/e\/([a-z0-9]+)$/); return m ? m[1] : null; })();
+  if (engCode) return <EngagementSurveyPage code={engCode} />;
+  if (path === "/admin") return <AdminApp />;
+  return <PublicApp />;
 }
