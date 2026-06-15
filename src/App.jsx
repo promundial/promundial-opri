@@ -588,13 +588,22 @@ function SectionHeader({ title, color }) {
   );
 }
 
-function SurveyHeader({ title, sub, accent, pct }) {
+function SurveyHeader({ title, sub, accent, pct, onLogout }) {
   const ac = accent || GOLD;
   return (
     <div style={{ background: "linear-gradient(135deg, " + GREEN + ", " + GREEN_MID + ")", padding: "18px 20px 14px", borderBottom: "3px solid " + ac }}>
-      <div style={{ fontSize: 9, color: GOLD, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 3 }}>OPRI™ Enterprise</div>
-      <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 19, color: WHITE, fontWeight: 600 }}>{title}</div>
-      <div style={{ fontSize: 11, color: GOLD_PALE, marginTop: 2 }}>{sub}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 9, color: GOLD, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 3 }}>OPRI™ Enterprise</div>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 19, color: WHITE, fontWeight: 600 }}>{title}</div>
+          <div style={{ fontSize: 11, color: GOLD_PALE, marginTop: 2 }}>{sub}</div>
+        </div>
+        {onLogout && (
+          <button onClick={onLogout} title="Guardar progreso y salir" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 7, color: "rgba(255,255,255,0.85)", fontSize: 11, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit", flexShrink: 0, marginLeft: 10 }}>
+            ⏸ Pausar
+          </button>
+        )}
+      </div>
       {pct != null && (
         <div style={{ marginTop: 8, height: 3, background: "rgba(255,255,255,0.15)", borderRadius: 99 }}>
           <div style={{ height: "100%", width: pct + "%", background: ac, borderRadius: 99, transition: "width 0.4s" }} />
@@ -710,19 +719,21 @@ function markSurveyDone(surveyId) {
 }
 
 // ── OPRI Survey (Core & Full) ─────────────────────────────────────────────────
-function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inheritedMeta, onMetaSaved, onSurveyDone }) {
+function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inheritedMeta, onMetaSaved, onSurveyDone, savedProgress, onProgress, onClearProgress, onLogout }) {
   const isCore = level === "core";
   const dims = isCore ? CORE_DIMS : FULL_DIMS;
   const allQs = [];
   dims.forEach(function(d) { d.questions.forEach(function(q) { allQs.push(q); }); });
 
-  // Use inheritedMeta (passed from parent) or localStorage fallback
+  // Restore from saved progress or use inheritedMeta
   var storedMeta = loadSavedMeta();
-  var initialMeta = isCore ? null : (inheritedMeta || storedMeta || null);
+  var initialMeta = isCore ? (savedProgress && savedProgress.meta ? savedProgress.meta : null) : (inheritedMeta || storedMeta || (savedProgress && savedProgress.meta) || null);
+  var initialDimIdx = savedProgress && savedProgress.dimIdx != null ? savedProgress.dimIdx : 0;
+  var initialAnswers = savedProgress && savedProgress.answers ? savedProgress.answers : {};
 
   const [meta, setMeta] = useState(initialMeta);
-  const [dimIdx, setDimIdx] = useState(0);
-  const [answers, setAnswers] = useState({});
+  const [dimIdx, setDimIdx] = useState(initialDimIdx);
+  const [answers, setAnswers] = useState(initialAnswers);
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -730,7 +741,8 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
     setSaving(true);
     const id = "R_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
     await saveResponse({ id: id, timestamp: new Date().toISOString(), survey: level, meta: meta, answers: answers, engagement_code: engagementCode || "" });
-    if (onSurveyDone) onSurveyDone(level); // track in parent session
+    if (onSurveyDone) onSurveyDone(level);
+    if (onClearProgress) onClearProgress(); // clear saved progress on submit
     setSaving(false);
     setDone(true);
     onDone();
@@ -738,10 +750,16 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
 
   function handleStart(m) {
     if (isCore) {
-      saveMeta(m); // localStorage fallback
-      if (onMetaSaved) onMetaSaved(m); // pass to parent state
+      saveMeta(m);
+      if (onMetaSaved) onMetaSaved(m);
     }
     setMeta(m);
+    if (onProgress) onProgress({ meta: m, dimIdx: 0, answers: {} });
+  }
+
+  function handleAdvanceDim(newDimIdx, newAnswers) {
+    setDimIdx(newDimIdx);
+    if (onProgress) onProgress({ meta: meta, dimIdx: newDimIdx, answers: newAnswers || answers });
   }
 
   if (done) {
@@ -756,18 +774,23 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
   const answered = allQs.filter(function(q) { return answers[q.id] != null; }).length;
   const pct = (answered / allQs.length) * 100;
 
+  // Auto-save on every answer change
+  useEffect(function() {
+    if (meta && onProgress) onProgress({ meta: meta, dimIdx: dimIdx, answers: answers });
+  }, [answers]);
+
   return (
     <div>
-      <SurveyHeader title={dim.short + " · " + (dimIdx + 1) + "/" + dims.length} sub={dim.label} accent={dim.color} pct={pct} />
+      <SurveyHeader title={dim.short + " · " + (dimIdx + 1) + "/" + dims.length} sub={dim.label} accent={dim.color} pct={pct} onLogout={onLogout} />
       <div style={{ padding: "16px 18px 26px", maxWidth: 560, margin: "0 auto" }}>
         <p style={{ fontSize: 10, color: MUTED_LT, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>{answered}/{allQs.length}</p>
         {dim.questions.map(function(q) {
           return <LikertQuestion key={q.id} qid={q.id} text={q.text} value={answers[q.id]} color={dim.color} onChange={function(v) { setAnswers(function(p) { const n = Object.assign({}, p); n[q.id] = v; return n; }); }} />;
         })}
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          {dimIdx > 0 && <button onClick={function() { setDimIdx(function(i) { return i - 1; }); }} style={btn(MUTED, false)}>← Anterior</button>}
+          {dimIdx > 0 && <button onClick={function() { var ni = dimIdx - 1; handleAdvanceDim(ni, answers); }} style={btn(MUTED, false)}>← Anterior</button>}
           {dimIdx < dims.length - 1
-            ? <button disabled={!dimDone} onClick={function() { setDimIdx(function(i) { return i + 1; }); }} style={btn(dim.color, !dimDone)}>Siguiente →</button>
+            ? <button disabled={!dimDone} onClick={function() { var ni = dimIdx + 1; var updated = answers; handleAdvanceDim(ni, updated); }} style={btn(dim.color, !dimDone)}>Siguiente →</button>
             : <button disabled={!dimDone || saving} onClick={submit} style={btn(GREEN, !dimDone || saving)}>{saving ? "Guardando…" : "Enviar ✓"}</button>
           }
         </div>
@@ -777,15 +800,19 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
 }
 
 // ── Deep Dive Survey ──────────────────────────────────────────────────────────
-function DeepSurvey({ mod, onDone, onBack, engagementCode, inheritedMeta, onSurveyDone }) {
+function DeepSurvey({ mod, onDone, onBack, engagementCode, inheritedMeta, onSurveyDone, savedProgress, onProgress, onClearProgress, onLogout }) {
   const allQs = [];
   mod.groups.forEach(function(g) { g.qs.forEach(function(q) { allQs.push(q); }); });
 
-  // Use inheritedMeta from parent or localStorage fallback
+  // Restore from saved progress or use inheritedMeta
   var storedMeta = loadSavedMeta();
-  const [meta, setMeta] = useState(inheritedMeta || storedMeta || null);
-  const [groupIdx, setGroupIdx] = useState(0);
-  const [answers, setAnswers] = useState({});
+  var initialMeta = inheritedMeta || storedMeta || (savedProgress && savedProgress.meta) || null;
+  var initialGroupIdx = savedProgress && savedProgress.groupIdx != null ? savedProgress.groupIdx : 0;
+  var initialAnswers = savedProgress && savedProgress.answers ? savedProgress.answers : {};
+
+  const [meta, setMeta] = useState(initialMeta);
+  const [groupIdx, setGroupIdx] = useState(initialGroupIdx);
+  const [answers, setAnswers] = useState(initialAnswers);
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -793,7 +820,8 @@ function DeepSurvey({ mod, onDone, onBack, engagementCode, inheritedMeta, onSurv
     setSaving(true);
     const id = "R_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
     await saveResponse({ id: id, timestamp: new Date().toISOString(), survey: "deep_" + mod.id, meta: meta, answers: answers, engagement_code: engagementCode || "" });
-    if (onSurveyDone) onSurveyDone("deep_" + mod.id); // track in parent session
+    if (onSurveyDone) onSurveyDone("deep_" + mod.id);
+    if (onClearProgress) onClearProgress();
     setSaving(false);
     setDone(true);
     onDone();
@@ -811,9 +839,14 @@ function DeepSurvey({ mod, onDone, onBack, engagementCode, inheritedMeta, onSurv
   const answered = allQs.filter(function(q) { return answers[q.id] != null; }).length;
   const pct = (answered / allQs.length) * 100;
 
+  // Auto-save on every answer change
+  useEffect(function() {
+    if (meta && onProgress) onProgress({ meta: meta, groupIdx: groupIdx, answers: answers });
+  }, [answers, groupIdx]);
+
   return (
     <div>
-      <SurveyHeader title={grp.label} sub={mod.index + " · " + (groupIdx + 1) + "/" + mod.groups.length} accent={mod.color} pct={pct} />
+      <SurveyHeader title={grp.label} sub={mod.index + " · " + (groupIdx + 1) + "/" + mod.groups.length} accent={mod.color} pct={pct} onLogout={onLogout} />
       <div style={{ padding: "16px 18px 26px", maxWidth: 560, margin: "0 auto" }}>
         <p style={{ fontSize: 10, color: MUTED_LT, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>{answered}/{allQs.length}</p>
         {grp.qs.map(function(q) {
@@ -1676,8 +1709,22 @@ function EngagementSurveyPage({ code }) {
   const [authenticated, setAuthenticated] = useState(false); // respondent login
   // completedSurveys is keyed by engagement code so different engagements don't bleed
   var SESSION_KEY = "opri_session_" + code;
-  function loadSession() { try { var v = sessionStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : { done: [] }; } catch(e) { return { done: [] }; } }
+  function loadSession() { try { var v = sessionStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : { done: [], progress: {} }; } catch(e) { return { done: [], progress: {} }; } }
   function saveSession(s) { try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch(e) {} }
+  function updateProgress(surveyId, data) {
+    var s = loadSession();
+    s.progress = s.progress || {};
+    s.progress[surveyId] = data;
+    saveSession(s);
+  }
+  function clearProgress(surveyId) {
+    var s = loadSession();
+    if (s.progress) { delete s.progress[surveyId]; saveSession(s); }
+  }
+  function getProgress(surveyId) {
+    var s = loadSession();
+    return (s.progress && s.progress[surveyId]) || null;
+  }
   const [session, setSession] = useState(loadSession());
   var completedSurveys = session.done;
 
@@ -1820,9 +1867,9 @@ function EngagementSurveyPage({ code }) {
         </div>
       );
     }
-    if (activeSurvey.id === "core") return <OPRISurvey level="core" engagementCode={code} presetCompany={engagement.company} onDone={handleDone} onMetaSaved={setSavedMeta} onSurveyDone={handleSurveyDone} onBack={function() { setActiveSurvey(null); }} />;
-    if (activeSurvey.id === "full") return <OPRISurvey level="full" engagementCode={code} presetCompany={engagement.company} inheritedMeta={savedMeta} onDone={handleDone} onSurveyDone={handleSurveyDone} onBack={function() { setActiveSurvey(null); }} />;
-    if (activeSurvey.mod) return <DeepSurvey mod={activeSurvey.mod} engagementCode={code} inheritedMeta={savedMeta} onDone={handleDone} onSurveyDone={handleSurveyDone} onBack={function() { setActiveSurvey(null); }} />;
+    if (activeSurvey.id === "core") return <OPRISurvey level="core" engagementCode={code} presetCompany={engagement.company} onDone={handleDone} onMetaSaved={setSavedMeta} onSurveyDone={handleSurveyDone} onBack={function() { setActiveSurvey(null); }} savedProgress={getProgress("core")} onProgress={function(d) { updateProgress("core", d); }} onClearProgress={function() { clearProgress("core"); }} onLogout={function() { setAuthenticated(false); }} />;
+    if (activeSurvey.id === "full") return <OPRISurvey level="full" engagementCode={code} presetCompany={engagement.company} inheritedMeta={savedMeta} onDone={handleDone} onSurveyDone={handleSurveyDone} onBack={function() { setActiveSurvey(null); }} savedProgress={getProgress("full")} onProgress={function(d) { updateProgress("full", d); }} onClearProgress={function() { clearProgress("full"); }} onLogout={function() { setAuthenticated(false); }} />;
+    if (activeSurvey.mod) return <DeepSurvey mod={activeSurvey.mod} engagementCode={code} inheritedMeta={savedMeta} onDone={handleDone} onSurveyDone={handleSurveyDone} onBack={function() { setActiveSurvey(null); }} savedProgress={getProgress("deep_" + activeSurvey.mod.id)} onProgress={function(d) { updateProgress("deep_" + activeSurvey.mod.id, d); }} onClearProgress={function() { clearProgress("deep_" + activeSurvey.mod.id); }} onLogout={function() { setAuthenticated(false); }} />;
     return null;
   }
 
