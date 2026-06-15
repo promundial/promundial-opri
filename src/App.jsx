@@ -1813,23 +1813,6 @@ function generateDemoData() {
 // Called from EngCard: generateReport(eng, responses, scores)
 // Opens a new window with the full HTML report + print button
 
-const GREEN = "#1B4332";
-const GREEN_MID = "#2D6A4F";
-const GREEN_LT = "#40916C";
-const GOLD = "#C9A84C";
-const GOLD_PALE = "#F5EDD0";
-const CREAM = "#F8F4EC";
-const CHARCOAL = "#1A1A1A";
-const MUTED = "#6B7280";
-const RED = "#B91C1C";
-const AMBER = "#D97706";
-const ORANGE = "#EA580C";
-const BLUE = "#1D4ED8";
-const VIOLET = "#7C3AED";
-const INDIGO = "#4338CA";
-const TEAL = "#0F766E";
-const WHITE = "#FFFFFF";
-
 const MATURITY_ES = [
   { min: 0,   max: 2.5,  es: "Crítico",       en: "Critical",       color: RED },
   { min: 2.5, max: 3.2,  es: "Vulnerable",    en: "Vulnerable",     color: ORANGE },
@@ -1839,13 +1822,13 @@ const MATURITY_ES = [
 ];
 function getM(s) { return MATURITY_ES.find(function(m) { return s >= m.min && s < m.max; }) || MATURITY_ES[MATURITY_ES.length-1]; }
 
-const PAI_BANDS = [
+const RPT_PAI_BANDS = [
   { min: 0,   max: 0.3,  es: "Alta alineación",      en: "High Alignment",       color: GREEN },
   { min: 0.3, max: 0.7,  es: "Moderado",             en: "Moderate",             color: AMBER },
   { min: 0.7, max: 1.2,  es: "Riesgo",               en: "Risk",                 color: ORANGE },
   { min: 1.2, max: 99,   es: "Desconexión crítica",  en: "Critical Disconnection",color: RED },
 ];
-function getPAI(g) { return PAI_BANDS.find(function(b) { return g >= b.min && g < b.max; }) || PAI_BANDS[PAI_BANDS.length-1]; }
+function getPAI(g) { return RPT_PAI_BANDS.find(function(b) { return g >= b.min && g < b.max; }) || RPT_PAI_BANDS[RPT_PAI_BANDS.length-1]; }
 
 const DIM_META = {
   alignment:  { es: "Alineación Estratégica",          en: "Strategic Alignment",             color: BLUE,   icon: "◈" },
