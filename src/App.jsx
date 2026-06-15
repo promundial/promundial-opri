@@ -1538,7 +1538,10 @@ function AdminPanel({ password, onExit }) {
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, color: WHITE, fontWeight: 600 }}>OPRI™ Admin</div>
           <div style={{ fontSize: 9, color: GOLD, textTransform: "uppercase", letterSpacing: "0.1em" }}>Promundial Consulting Group</div>
         </div>
-        <button onClick={onExit} style={Object.assign({}, btn(MUTED, false), { fontSize: 11 })}>Salir</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={function() { window.open("/", "_blank"); }} style={Object.assign({}, btn(GOLD, false), { fontSize: 11, color: CHARCOAL })}>📊 Ver resultados</button>
+          <button onClick={onExit} style={Object.assign({}, btn(MUTED, false), { fontSize: 11 })}>Salir</button>
+        </div>
       </div>
 
       <div style={{ padding: "22px 18px", maxWidth: 700, margin: "0 auto" }}>
@@ -2697,7 +2700,7 @@ export default function App() {
   if (engCode) return <EngagementSurveyPage code={engCode} />;
   if (path === "/admin") {
     if (!adminPassword) return <AdminLogin onAuth={setAdminPassword} />;
-    return <AdminPanel password={adminPassword} onExit={function() { setAdminPassword(null); window.history.pushState({}, "", "/"); window.location.reload(); }} />;
+    return <AdminPanel password={adminPassword} onExit={function() { setAdminPassword(null); }} />;
   }
 
   const [responses, setResponses] = useState([]);
