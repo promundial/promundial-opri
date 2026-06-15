@@ -709,7 +709,7 @@ function markSurveyDone(surveyId) {
 }
 
 // ── OPRI Survey (Core & Full) ─────────────────────────────────────────────────
-function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inheritedMeta, onMetaSaved }) {
+function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inheritedMeta, onMetaSaved, onSurveyDone }) {
   const isCore = level === "core";
   const dims = isCore ? CORE_DIMS : FULL_DIMS;
   const allQs = [];
@@ -729,7 +729,7 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
     setSaving(true);
     const id = "R_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
     await saveResponse({ id: id, timestamp: new Date().toISOString(), survey: level, meta: meta, answers: answers, engagement_code: engagementCode || "" });
-    markSurveyDone(level); // track locally so UI shows "Completado"
+    if (onSurveyDone) onSurveyDone(level); // track in parent session
     setSaving(false);
     setDone(true);
     onDone();
@@ -776,7 +776,7 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
 }
 
 // ── Deep Dive Survey ──────────────────────────────────────────────────────────
-function DeepSurvey({ mod, onDone, onBack, engagementCode, inheritedMeta }) {
+function DeepSurvey({ mod, onDone, onBack, engagementCode, inheritedMeta, onSurveyDone }) {
   const allQs = [];
   mod.groups.forEach(function(g) { g.qs.forEach(function(q) { allQs.push(q); }); });
 
@@ -792,7 +792,7 @@ function DeepSurvey({ mod, onDone, onBack, engagementCode, inheritedMeta }) {
     setSaving(true);
     const id = "R_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
     await saveResponse({ id: id, timestamp: new Date().toISOString(), survey: "deep_" + mod.id, meta: meta, answers: answers, engagement_code: engagementCode || "" });
-    markSurveyDone("deep_" + mod.id); // track locally so UI shows "Completado"
+    if (onSurveyDone) onSurveyDone("deep_" + mod.id); // track in parent session
     setSaving(false);
     setDone(true);
     onDone();
@@ -1609,7 +1609,12 @@ function EngagementSurveyPage({ code }) {
   const [activeSurvey, setActiveSurvey] = useState(null);
   const [responses, setResponses] = useState([]);
   const [savedMeta, setSavedMeta] = useState(null); // persists meta across levels
-  const [completedSurveys, setCompletedSurveys] = useState(loadCompletedSurveys()); // tracks what THIS respondent finished
+  // completedSurveys is keyed by engagement code so different engagements don't bleed
+  var SESSION_KEY = "opri_session_" + code;
+  function loadSession() { try { var v = sessionStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : { done: [] }; } catch(e) { return { done: [] }; } }
+  function saveSession(s) { try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch(e) {} }
+  const [session, setSession] = useState(loadSession());
+  var completedSurveys = session.done;
 
   useEffect(function() {
     async function init() {
@@ -1627,8 +1632,18 @@ function EngagementSurveyPage({ code }) {
   async function handleDone() {
     const data = await loadResponses(code);
     setResponses(data);
-    setCompletedSurveys(loadCompletedSurveys()); // refresh completion state
+    var s = loadSession();
+    setSession(Object.assign({}, s)); // refresh session state
     setActiveSurvey(null);
+  }
+
+  function handleSurveyDone(surveyId) {
+    var s = loadSession();
+    if (s.done.indexOf(surveyId) < 0) {
+      s.done.push(surveyId);
+      saveSession(s);
+      setSession(Object.assign({}, s));
+    }
   }
 
   if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM }}><div style={{ textAlign: "center", color: MUTED }}><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 24, color: GREEN, marginBottom: 6 }}>OPRI™</div><div>Cargando…</div></div></div>;
@@ -1700,9 +1715,9 @@ function EngagementSurveyPage({ code }) {
         <div style={{ padding: "22px 18px", maxWidth: 540, margin: "0 auto" }}>
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 4 }}>{engagement.company}</div>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 20 }}>OPRI™ Core Survey · Complete su diagnóstico</div>
-          <SurveyCard level="Level 1" badge={coreDone ? "✓ Completado" : (coreRR.length > 0 ? coreRR.length + " resp." : "Iniciar")} label="OPRI Core 25" desc="Diagnóstico rápido · 25 preguntas · ~8 min" color={GREEN} status={coreDone ? "done" : "available"} onClick={coreDone ? undefined : function() { setActiveSurvey({ id: "core" }); }} />
+          <SurveyCard level="Level 1" badge={coreDone ? "✓ Completado" : "Iniciar"} label="OPRI Core 25" desc="Diagnóstico rápido · 25 preguntas · ~8 min" color={GREEN} status={coreDone ? "done" : "available"} onClick={coreDone ? undefined : function() { setActiveSurvey({ id: "core" }); }} />
           {coreRR.length > 0 && l2.active && (
-            <SurveyCard level="Level 2" badge={fullDone ? "✓ Completado" : (fullRR.length > 0 ? fullRR.length + " resp." : "Activado")} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status={fullDone ? "done" : "activated"} triggers={fullDone ? [] : l2.reasons.slice(0, 2)} onClick={fullDone ? undefined : function() { setActiveSurvey({ id: "full" }); }} />
+            <SurveyCard level="Level 2" badge={fullDone ? "✓ Completado" : "Activado"} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status={fullDone ? "done" : "activated"} triggers={[]} onClick={fullDone ? undefined : function() { setActiveSurvey({ id: "full" }); }} />
           )}
           {coreRR.length > 0 && !l2.active && (
             <div style={{ padding: "13px 14px", background: "#DCFCE7", borderRadius: 9, border: "1px solid " + GREEN_LT + "55", marginTop: 8 }}>
@@ -1720,7 +1735,7 @@ function EngagementSurveyPage({ code }) {
                 const qCount = m.groups.reduce(function(sum, g) { return sum + g.qs.length; }, 0);
                 const trigger = l3.reasons.find(function(r) { return r.indexOf(m.code) >= 0 || r.indexOf("Full Deep Dive") >= 0; });
                 return (
-                  <SurveyCard key={m.id} level={m.index} badge={deepDone ? "✓ Completado" : (deepCounts[m.id] > 0 ? deepCounts[m.id] + " resp." : "Activado")} label={m.fullName} desc={qCount + " preguntas"} color={m.color} status={deepDone ? "done" : "activated"} triggers={deepDone ? [] : (trigger ? [trigger] : [])} onClick={deepDone ? undefined : function() { setActiveSurvey({ id: "deep_" + m.id, mod: m }); }} />
+                  <SurveyCard key={m.id} level={m.index} badge={deepDone ? "✓ Completado" : "Activado"} label={m.fullName} desc={qCount + " preguntas"} color={m.color} status={deepDone ? "done" : "activated"} triggers={deepDone ? [] : (trigger ? [trigger] : [])} onClick={deepDone ? undefined : function() { setActiveSurvey({ id: "deep_" + m.id, mod: m }); }} />
                 );
               })}
             </div>
@@ -1728,9 +1743,9 @@ function EngagementSurveyPage({ code }) {
         </div>
       );
     }
-    if (activeSurvey.id === "core") return <OPRISurvey level="core" engagementCode={code} presetCompany={engagement.company} onDone={handleDone} onMetaSaved={setSavedMeta} onBack={function() { setActiveSurvey(null); }} />;
-    if (activeSurvey.id === "full") return <OPRISurvey level="full" engagementCode={code} presetCompany={engagement.company} inheritedMeta={savedMeta} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
-    if (activeSurvey.mod) return <DeepSurvey mod={activeSurvey.mod} engagementCode={code} inheritedMeta={savedMeta} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
+    if (activeSurvey.id === "core") return <OPRISurvey level="core" engagementCode={code} presetCompany={engagement.company} onDone={handleDone} onMetaSaved={setSavedMeta} onSurveyDone={handleSurveyDone} onBack={function() { setActiveSurvey(null); }} />;
+    if (activeSurvey.id === "full") return <OPRISurvey level="full" engagementCode={code} presetCompany={engagement.company} inheritedMeta={savedMeta} onDone={handleDone} onSurveyDone={handleSurveyDone} onBack={function() { setActiveSurvey(null); }} />;
+    if (activeSurvey.mod) return <DeepSurvey mod={activeSurvey.mod} engagementCode={code} inheritedMeta={savedMeta} onDone={handleDone} onSurveyDone={handleSurveyDone} onBack={function() { setActiveSurvey(null); }} />;
     return null;
   }
 
