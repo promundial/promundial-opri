@@ -353,6 +353,7 @@ const PAI_LEAD = ["Comité Ejecutivo", "Directores/Gerentes"];
 const PAI_ORG  = ["Supervisores", "Colaboradores", "Otros"];
 const API_BASE = "";
 const ADMIN_PASS_KEY = "opri_admin_pw";
+const RESPONDENT_PASS = "encuestado2026";
 
 // ── API / Airtable ──────────────────────────────────────────────────────────
 async function loadResponses(engCode) {
@@ -1617,6 +1618,54 @@ function EngCard({ eng, onClose, onReopen, onResults, closed, password, onReload
   );
 }
 
+
+// ── Respondent Login ───────────────────────────────────────────────────────────
+function RespondentLogin({ company, onAuth }) {
+  const [pw, setPw] = useState("");
+  const [error, setError] = useState(false);
+  function attempt() {
+    if (pw === RESPONDENT_PASS) { onAuth(); }
+    else { setError(true); setTimeout(function() { setError(false); }, 1800); setPw(""); }
+  }
+  function handleKey(e) { if (e.key === "Enter") attempt(); }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 24 }}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');"}</style>
+      <div style={{ background: WHITE, borderRadius: 14, padding: "36px 32px", maxWidth: 380, width: "100%", boxShadow: "0 4px 24px rgba(0,0,0,0.08)", border: "1px solid " + CREAM_DK }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 28, color: GREEN, fontWeight: 600, marginBottom: 4 }}>OPRI™</div>
+          <div style={{ fontSize: 10, color: GOLD, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 12 }}>Enterprise Edition · Promundial</div>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, color: CHARCOAL, marginBottom: 4 }}>{company}</div>
+          <div style={{ fontSize: 12, color: MUTED }}>Ingrese la contraseña para comenzar</div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", fontSize: 11, color: MUTED, marginBottom: 5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Contraseña</label>
+          <input
+            type="password"
+            value={pw}
+            onChange={function(e) { setPw(e.target.value); }}
+            onKeyDown={handleKey}
+            placeholder="••••••••••••"
+            style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "2px solid " + (error ? RED : CREAM_DK), background: WHITE, fontSize: 15, color: CHARCOAL, boxSizing: "border-box", outline: "none", fontFamily: "inherit", transition: "border-color 0.2s" }}
+            autoFocus
+          />
+          {error && <div style={{ fontSize: 11, color: RED, marginTop: 5, fontWeight: 600 }}>Contraseña incorrecta. Intente nuevamente.</div>}
+        </div>
+        <button
+          onClick={attempt}
+          disabled={!pw}
+          style={{ width: "100%", padding: "11px", borderRadius: 8, background: pw ? GREEN : CREAM_DK, color: pw ? WHITE : MUTED_LT, border: "none", fontSize: 14, fontWeight: 700, cursor: pw ? "pointer" : "not-allowed", fontFamily: "inherit", transition: "all 0.15s" }}
+        >
+          Ingresar →
+        </button>
+        <div style={{ textAlign: "center", marginTop: 20, fontSize: 10, color: MUTED_LT, letterSpacing: "0.06em" }}>
+          OPRI™ ENTERPRISE EDITION · PROMUNDIAL CONSULTING GROUP
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Engagement Survey (public URL /e/:code) ───────────────────────────────────
 function EngagementSurveyPage({ code }) {
   const [engagement, setEngagement] = useState(null);
@@ -1624,6 +1673,7 @@ function EngagementSurveyPage({ code }) {
   const [activeSurvey, setActiveSurvey] = useState(null);
   const [responses, setResponses] = useState([]);
   const [savedMeta, setSavedMeta] = useState(null); // persists meta across levels
+  const [authenticated, setAuthenticated] = useState(false); // respondent login
   // completedSurveys is keyed by engagement code so different engagements don't bleed
   var SESSION_KEY = "opri_session_" + code;
   function loadSession() { try { var v = sessionStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : { done: [] }; } catch(e) { return { done: [] }; } }
@@ -1662,6 +1712,10 @@ function EngagementSurveyPage({ code }) {
   }
 
   if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM }}><div style={{ textAlign: "center", color: MUTED }}><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 24, color: GREEN, marginBottom: 6 }}>OPRI™</div><div>Cargando…</div></div></div>;
+
+  if (!authenticated && engagement && engagement.status === "active") {
+    return <RespondentLogin company={engagement.company} onAuth={function() { setAuthenticated(true); }} />;
+  }
 
   if (!engagement) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 24 }}>
@@ -2120,6 +2174,212 @@ function getRecommendations(dimId, score) {
 // ── Main report generator ─────────────────────────────────────────────────────
 var LOGO_B64 = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODU4IiBoZWlnaHQ9IjEyOSIgdmlld0JveD0iMCAwIDg1OCAxMjkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xMTguMTk1IDU0LjgxNzRMOTkuNDA4MyAzNi4wMzA4TDg3LjYwMDMgNDguNDQzM0wxMDkuMTg5IDQ4LjY1MDhMMTAxLjA2MyA2MC4xNzE5TDgwLjAzNTcgNTkuOTcwNEw3Ni44MzAzIDU5LjkzOTlMNjYuNDgxNSA1OS44NDIyVjI0LjI4MzlMNzcuNDUzIDE2LjczMTRWMzguMzQ0OEw4OS44Nzc3IDI2LjUwMDJMNzEuMTgyNyA3LjgwNTI0QzY2LjEwOTEgMi43MzE1OSA1Ny44OTExIDIuNzMxNTkgNTIuODE3NCA3LjgwNTI0TDM0LjAzMDkgMjYuNTkxOEw0Ni40NDMzIDM4LjM5OThMNDYuNjUwOSAxNi44MTA4TDU4LjE3MTkgMjQuOTM3Mkw1Ny45NzA0IDQ1Ljk2NDRMNTcuOTM5OSA0OS4xNjk4TDU3Ljg0MjIgNTkuNTE4NkgyMi4yODM5TDE0LjczMTQgNDguNTQ3SDM2LjM0NDhMMjQuNTAwMiAzNi4xMjI0TDUuODA1MjQgNTQuODE3NEMwLjczMTU4NyA1OS44OTEgMC43MzE1ODcgNjguMTE1MSA1LjgwNTI0IDczLjE4MjZMMjQuNTkxOCA5MS45NjkyTDM2LjM5OTggNzkuNTU2N0wxNC44MTA4IDc5LjM0OTJMMjIuOTM3MiA2Ny44MjgxTDQzLjk2NDUgNjguMDI5Nkw0Ny4xNjk5IDY4LjA2MDFMNTcuNTE4NiA2OC4xNTc4VjEwMy43MTZMNDYuNTQ3MSAxMTEuMjY5Vjg5LjY1NTJMMzQuMTIyNSAxMDEuNUw1Mi44MTc0IDEyMC4xOTVDNTcuODkxMSAxMjUuMjY4IDY2LjEwOTEgMTI1LjI2OCA3MS4xODI3IDEyMC4xOTVMODkuOTY5MiAxMDEuNDA4TDc3LjU1NjggODkuNjAwMkw3Ny4zNDkyIDExMS4xODlMNjUuODI4MiAxMDMuMDYzTDY2LjAyOTcgODIuMDM1Nkw2Ni4wNjAyIDc4LjgzMDJMNjYuMTU3OSA2OC40ODE0SDEwMS43MTZMMTA5LjI2OSA3OS40NTNIODcuNjU1M0w5OS40OTk5IDkxLjg3NzZMMTE4LjE5NSA3My4xODI2QzEyMy4yNjkgNjguMTA5IDEyMy4yNjkgNTkuODkxIDExOC4xOTUgNTQuODE3NFoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTE3My45NzcgNzMuMTlDMTcyLjcwMSA3My4xOSAxNzEuNDI1IDczLjE5IDE3MC4xNDkgNzMuMTlDMTY4Ljg3MyA3My4xOSAxNjcuNzM4IDczLjA0ODIgMTY2LjYwNCA3Mi45MDY1VjEwNC4wOThIMTUyVjI0LjI3NTlIMTc1LjExMUMxNzguOTM5IDI0LjI3NTkgMTgyLjM0MiAyNC40MTc3IDE4NS4xNzggMjQuODQzQzE4OC4wMTQgMjUuMjY4NCAxOTAuNzA4IDI1LjY5MzcgMTkyLjk3NiAyNi40MDI2QzE5OC4zNjQgMjguMTAzOSAyMDIuNjE4IDMwLjc5NzggMjA1LjU5NSAzNC4zNDIzQzIwOC41NzMgMzguMDI4NiAyMDkuOTkxIDQyLjcwNzMgMjA5Ljk5MSA0OC4zNzg1QzIwOS45OTEgNTIuMjA2NiAyMDkuMTQgNTUuNzUxMSAyMDcuNTggNTguNzI4NEMyMDYuMDIxIDYxLjg0NzYgMjAzLjYxIDY0LjM5OTYgMjAwLjYzMyA2Ni41MjYzQzE5Ny41MTMgNjguNjUzIDE5My44MjcgNzAuMzU0NCAxODkuNDMyIDcxLjQ4ODdDMTg0Ljg5NCA3Mi42MjI5IDE3OS43OSA3My4xOSAxNzMuOTc3IDczLjE5Wk0xNjYuNjA0IDYwLjU3MTZDMTY3LjQ1NSA2MC43MTM0IDE2OC40NDcgNjAuNzEzNCAxNjkuODY1IDYwLjg1NTFDMTcxLjE0MSA2MC44NTUxIDE3Mi41NTkgNjAuOTk3IDE3My44MzUgNjAuOTk3QzE3Ny44MDUgNjAuOTk3IDE4MS4wNjYgNjAuNzEzNCAxODMuNzYgNjAuMDA0NUMxODYuNDU0IDU5LjQzNzQgMTg4LjU4MSA1OC40NDQ5IDE5MC4xNDEgNTcuMzEwNkMxOTEuODQyIDU2LjE3NjQgMTkyLjk3NiA1NC43NTg2IDE5My42ODUgNTMuMTk5MUMxOTQuMzk0IDUxLjYzOTUgMTk0LjgxOSA0OS43OTYzIDE5NC44MTkgNDcuOTUzMkMxOTQuODE5IDQ1LjU0MjkgMTk0LjI1MiA0My41NTggMTkzLjI2IDQxLjg1NjdDMTkyLjEyNiA0MC4xNTUzIDE5MC4yODIgMzguODc5MyAxODcuNTg4IDM3Ljg4NjhDMTg2LjE3MSAzNy40NjE1IDE4NC40NjkgMzcuMDM2MSAxODIuNDg0IDM2Ljg5NDNDMTgwLjQ5OSAzNi42MTA4IDE3Ny45NDcgMzYuNjEwOCAxNzQuOTY5IDM2LjYxMDhIMTY2Ljc0NlY2MC41NzE2SDE2Ni42MDRaIiBmaWxsPSIjRjdGMEVEIi8+CjxwYXRoIGQ9Ik0yNzcuMTk3IDQ4LjIzN0MyNzcuMTk3IDUzLjc2NjQgMjc1LjYzOCA1OC41ODcgMjcyLjUxOSA2Mi40MTVDMjY5LjM5OSA2Ni4yNDMxIDI2NC43MiA2OS4yMjA0IDI1OC4xOTggNzEuMDYzNlY3MS4zNDcyTDI4Mi4wMTggMTA0LjI0SDI2NC40MzdMMjQyLjc0MyA3My4zMzIxSDIzMi42NzdWMTA0LjI0SDIxOC4wNzNWMjQuNDE4SDI0Mi4zMThDMjQ2LjI4OCAyNC40MTggMjUwLjExNiAyNC43MDE1IDI1My41MTkgMjUuMTI2OUMyNTYuOTIyIDI1LjU1MjIgMjU5LjkgMjYuMjYxMSAyNjIuNDUyIDI3LjI1MzZDMjY3LjEzMSAyOS4wOTY3IDI3MC44MTcgMzEuNjQ4NyAyNzMuMzY5IDM1LjE5MzJDMjc1LjkyMSAzOC40NTQyIDI3Ny4xOTcgNDIuOTkxMiAyNzcuMTk3IDQ4LjIzN1pNMjM5LjkwOCA2MC45OTcyQzI0My4zMTEgNjAuOTk3MiAyNDYuMTQ2IDYwLjg1NTUgMjQ4LjQxNSA2MC41NzE5QzI1MC42ODMgNjAuMjg4MyAyNTIuNjY4IDU5Ljg2MyAyNTQuMjI4IDU5LjI5NTlDMjU3LjIwNiA1OC4xNjE2IDI1OS4xOTEgNTYuNjAyIDI2MC4zMjUgNTQuNzU4OUMyNjEuNDU5IDUyLjc3MzkgMjYyLjAyNiA1MC42NDcyIDI2Mi4wMjYgNDguMDk1MkMyNjIuMDI2IDQ1Ljk2ODUgMjYxLjYwMSA0My45ODM2IDI2MC43NSA0Mi40MjRDMjU5LjkgNDAuNzIyNiAyNTguMzQgMzkuNDQ2NiAyNTYuMjEzIDM4LjQ1NDJDMjU0Ljc5NSAzNy43NDUzIDI1My4wOTQgMzcuMzE5OSAyNTAuOTY3IDM3LjAzNjRDMjQ4Ljg0IDM2Ljc1MjggMjQ2LjI4OCAzNi42MTEgMjQzLjE2OSAzNi42MTFIMjMyLjY3N1Y2MS4xMzlIMjM5LjkwOFY2MC45OTcyWiIgZmlsbD0iI0Y3RjBFRCIvPgo8cGF0aCBkPSJNMzYxLjg0MyA2NC4yNThDMzYxLjg0MyA3MC4zNTQ1IDM2MC45OTIgNzUuODgzOSAzNTkuMjkxIDgwLjk4OEMzNTcuNTkgODYuMDkyMSAzNTUuMDM3IDkwLjQ4NzMgMzUxLjc3NiA5NC4wMzE4QzM0OC41MTUgOTcuNzE4MSAzNDQuNDAzIDEwMC41NTQgMzM5LjU4MyAxMDIuNTM5QzMzNC43NjIgMTA0LjUyNCAzMjkuMjMyIDEwNS41MTYgMzIzLjEzNSAxMDUuNTE2QzMxNi44OTcgMTA1LjUxNiAzMTEuNTA5IDEwNC41MjQgMzA2LjY4OCAxMDIuNTM5QzMwMS44NjcgMTAwLjU1NCAyOTcuNzU2IDk3LjcxODEgMjk0LjQ5NSA5NC4wMzE4QzI5MS4yMzMgOTAuMzQ1NSAyODguNjgxIDg1Ljk1MDMgMjg2Ljk4IDgwLjk4OEMyODUuMjc4IDc1Ljg4MzkgMjg0LjQyOCA3MC4zNTQ1IDI4NC40MjggNjQuMjU4QzI4NC40MjggNTguMTYxNCAyODUuMjc4IDUyLjYzMiAyODYuOTggNDcuNTI3OUMyODguNjgxIDQyLjQyMzkgMjkxLjIzMyAzOC4wMjg3IDI5NC40OTUgMzQuNDg0MkMyOTcuNzU2IDMwLjc5NzkgMzAxLjg2NyAyNy45NjIzIDMwNi42ODggMjUuOTc3M0MzMTEuNTA5IDIzLjk5MjQgMzE3LjAzOSAyMyAzMjMuMTM1IDIzQzMyOS4zNzQgMjMgMzM0Ljc2MiAyMy45OTI0IDMzOS41ODMgMjUuOTc3M0MzNDQuNDAzIDI3Ljk2MjMgMzQ4LjUxNSAzMC43OTc5IDM1MS43NzYgMzQuNDg0MkMzNTUuMDM3IDM4LjE3MDQgMzU3LjU5IDQyLjU2NTYgMzU5LjI5MSA0Ny41Mjc5QzM2MC45OTIgNTIuNDkwMyAzNjEuODQzIDU4LjE2MTQgMzYxLjg0MyA2NC4yNThaTTM0Ni42NzIgNjQuMjU4QzM0Ni42NzIgNTkuNDM3NSAzNDYuMTA1IDU1LjE4NDEgMzQ0LjgyOSA1MS40OTc4QzM0My42OTUgNDcuODExNSAzNDEuOTkzIDQ0LjgzNDEgMzM5Ljg2NiA0Mi40MjM4QzMzNy43MzkgNDAuMDEzNSAzMzUuMTg3IDM4LjE3MDQgMzMyLjM1MiAzNy4wMzYyQzMyOS4zNzQgMzUuOTAxOSAzMjYuMjU1IDM1LjE5MzEgMzIyLjg1MiAzNS4xOTMxQzMxOS40NDkgMzUuMTkzMSAzMTYuMTg4IDM1Ljc2MDIgMzEzLjM1MiAzNy4wMzYyQzMxMC4zNzUgMzguMTcwNCAzMDcuOTY0IDQwLjAxMzUgMzA1LjgzOCA0Mi40MjM4QzMwMy43MTEgNDQuODM0MSAzMDIuMDA5IDQ3Ljk1MzMgMzAwLjg3NSA1MS40OTc4QzI5OS43NDEgNTUuMTg0MSAyOTkuMDMyIDU5LjQzNzUgMjk5LjAzMiA2NC4yNThDMjk5LjAzMiA2OS4wNzg1IDI5OS41OTkgNzMuMzMxOSAzMDAuODc1IDc3LjAxODJDMzAyLjAwOSA4MC43MDQ1IDMwMy43MTEgODMuNjgxOSAzMDUuODM4IDg2LjA5MjJDMzA3Ljk2NCA4OC41MDI0IDMxMC41MTYgOTAuMzQ1NiAzMTMuMzUyIDkxLjQ3OThDMzE2LjE4OCA5Mi43NTU4IDMxOS40NDkgOTMuMzIyOSAzMjIuODUyIDkzLjMyMjlDMzI2LjI1NSA5My4zMjI5IDMyOS41MTYgOTIuNzU1OCAzMzIuMzUyIDkxLjQ3OThDMzM1LjE4NyA5MC4yMDM4IDMzNy43MzkgODguNTAyNCAzMzkuODY2IDg2LjA5MjJDMzQxLjk5MyA4My42ODE5IDM0My42OTUgODAuNzA0NSAzNDQuODI5IDc3LjAxODJDMzQ2LjEwNSA3My4zMzE5IDM0Ni42NzIgNjkuMDc4NSAzNDYuNjcyIDY0LjI1OFoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTQxMS4wNDMgODIuNjg5MkM0MTIuNzQ1IDc2LjQ1MDkgNDE1LjAxMyA2OS42NDU1IDQxNy41NjUgNjIuNDE0N0w0MzEuMzE5IDI0LjEzNEg0NTEuODc4VjEwMy45NTZINDM3LjI3NFY2My40MDcxQzQzNy4yNzQgNTcuNDUyNCA0MzcuNTU3IDUwLjY0NjkgNDM3Ljk4MyA0Mi43MDcySDQzNy40MTVDNDM2LjcwNiA0NC45NzU3IDQzNS45OTggNDcuNTI3NyA0MzUuMDA1IDUwLjM2MzNDNDM0LjE1NCA1My4xOTkgNDMzLjE2MiA1Ni4wMzQ1IDQzMi4xNjkgNTguNzI4M0w0MTUuNTggMTAzLjgxNEg0MDYuMDgxTDM4OS40OTIgNTguNzI4M0MzODguNDk5IDU2LjAzNDUgMzg3LjUwNyA1My4xOTkgMzg2LjY1NiA1MC4zNjMzQzM4NS44MDUgNDcuNTI3NyAzODQuOTU0IDQ0Ljk3NTcgMzg0LjI0NSA0Mi43MDcySDM4My42NzhDMzg0LjEwNCA1MC4wNzk4IDM4NC4zODcgNTYuODg1MiAzODQuMzg3IDYzLjI2NTNWMTAzLjgxNEgzNjkuNzgzVjIzLjk5MjJIMzkwLjJMNDAzLjk1NCA2MS45ODkzQzQwNi4yMjIgNjguMzY5NCA0MDguNDkxIDc1LjE3NDggNDEwLjQ3NiA4Mi40MDU2SDQxMS4wNDNWODIuNjg5MloiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTQ5Ni42ODMgMTA1LjY1OEM0OTIuNTcxIDEwNS42NTggNDg4Ljc0MyAxMDUuMjMyIDQ4NS4zNCAxMDQuMzgyQzQ4MS45MzcgMTAzLjUzMSA0NzkuMTAxIDEwMi4zOTcgNDc2LjU0OSAxMDAuODM3QzQ3My45OTcgOTkuMjc3NyA0NzEuODcgOTcuNDM0NiA0NzAuMDI3IDk1LjE2NjFDNDY4LjE4NCA5Mi44OTc2IDQ2Ni43NjYgOTAuNDg3NCA0NjUuNzczIDg3LjY1MThDNDY0LjkyMyA4NS4zODMzIDQ2NC4yMTQgODIuOTczIDQ2My45MyA4MC4yNzkyQzQ2My41MDUgNzcuNTg1NCA0NjMuMzYzIDc0LjYwOCA0NjMuMzYzIDcxLjIwNTNWMjQuMTM0M0g0NzcuOTY3VjY5LjkyOTNDNDc3Ljk2NyA3NS42MDA1IDQ3OC42NzYgNzkuOTk1NiA0NzkuOTUyIDgzLjExNDhDNDgxLjUxMiA4Ni42NTkzIDQ4My42MzkgODkuMjExNCA0ODYuNjE2IDkwLjc3MUM0ODkuNDUyIDkyLjMzMDUgNDkyLjk5NiA5My4xODEyIDQ5Ni44MjUgOTMuMTgxMkM1MDAuNzk1IDkzLjE4MTIgNTA0LjE5OCA5Mi4zMzA1IDUwNy4wMzMgOTAuNzcxQzUwOS44NjkgODkuMjExNCA1MTIuMTM4IDg2LjY1OTMgNTEzLjY5NyA4My4xMTQ4QzUxNS4xMTUgNzkuOTk1NiA1MTUuNjgyIDc1LjQ1ODcgNTE1LjY4MiA2OS45MjkzVjI0LjEzNDNINTMwLjI4NlY3MS4yMDUzQzUzMC4yODYgNzQuNjA4IDUzMC4xNDQgNzcuNTg1NCA1MjkuNzE5IDgwLjI3OTJDNTI5LjI5NCA4Mi45NzMgNTI4LjcyNyA4NS41MjUxIDUyNy44NzYgODcuNjUxOEM1MjYuNzQyIDkwLjQ4NzQgNTI1LjMyNCA5Mi44OTc2IDUyMy40ODEgOTUuMTY2MUM1MjEuNjM3IDk3LjQzNDYgNTE5LjUxMSA5OS4yNzc3IDUxNi44MTcgMTAwLjgzN0M1MTQuMjY0IDEwMi4zOTcgNTExLjE0NSAxMDMuNTMxIDUwNy44ODQgMTA0LjM4MkM1MDQuNjIzIDEwNS4yMzIgNTAwLjkzNiAxMDUuNjU4IDQ5Ni42ODMgMTA1LjY1OFoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTU4My41OTcgNjEuNDIyM0M1ODkuMjY5IDY5LjY0NTUgNTkzLjk0OCA3Ni44NzYzIDU5Ny42MzQgODMuMTE0Nkg1OTguMDZDNTk3LjYzNCA3Mi43NjQ3IDU5Ny4zNTEgNjUuMTA4NiA1OTcuMzUxIDYwLjQyOThWMjQuMjc1OUg2MTEuOTU1VjEwNC4wOThINTk2LjY0Mkw1NzAuNTUzIDY3LjM3NzFDNTY2LjAxNiA2MC45OTcgNTYxLjE5NSA1My42MjQ0IDU1Ni4zNzQgNDUuMjU5M0g1NTUuODA3QzU1Ni4yMzMgNTUuMDQyMiA1NTYuNTE2IDYyLjY5ODMgNTU2LjUxNiA2Ny45NDQxVjEwNC4wOThINTQxLjkxMlYyNC4yNzU5SDU1Ny4yMjVMNTgzLjU5NyA2MS40MjIzWiIgZmlsbD0iI0Y3RjBFRCIvPgo8cGF0aCBkPSJNNjIzLjU4MiAxMDQuMDk4VjI0LjI3NTlINjQ0LjcwOEM2NDYuNTUxIDI0LjI3NTkgNjQ4LjUzNiAyNC4yNzU5IDY1MC4zNzkgMjQuNDE3N0M2NTIuMzY0IDI0LjU1OTUgNjU0LjIwOCAyNC43MDEyIDY1Ni4wNTEgMjQuOTg0OEM2NTcuODk0IDI1LjI2ODMgNjU5LjU5NiAyNS41NTIgNjYxLjI5NyAyNS44MzU1QzY2Mi45OTggMjYuMTE5MSA2NjQuNTU4IDI2LjU0NDQgNjY1Ljk3NiAyNy4xMTE1QzY3MC4yMyAyOC41MjkzIDY3NC4wNTggMzAuMjMwNyA2NzcuMzE5IDMyLjY0MDlDNjgwLjU4IDM0LjkwOTQgNjgzLjI3NCAzNy43NDUgNjg1LjU0MyA0MC44NjQyQzY4Ny44MTEgNDMuOTgzMyA2ODkuMzcxIDQ3LjUyNzkgNjkwLjUwNSA1MS4zNTU5QzY5MS42MzkgNTUuMTg0IDY5Mi4yMDYgNTkuNDM3NCA2OTIuMjA2IDYzLjk3NDNDNjkyLjIwNiA2OC4yMjc3IDY5MS43ODEgNzIuMzM5NCA2OTAuNzg5IDc2LjAyNTZDNjg5Ljc5NiA3OS44NTM3IDY4OC4zNzggODMuMjU2NCA2ODYuMzkzIDg2LjM3NTZDNjg0LjQwOCA4OS40OTQ3IDY4MS45OTggOTIuMTg4NiA2NzkuMDIgOTQuNTk4OUM2NzYuMDQzIDk3LjAwOTIgNjcyLjQ5OCA5OC44NTIzIDY2OC41MjggMTAwLjQxMkM2NjUuMTI1IDEwMS42ODggNjYxLjI5NyAxMDIuNjggNjU3LjA0MyAxMDMuMjQ3QzY1Mi43OSAxMDMuOTU2IDY0Ny45NjkgMTA0LjI0IDY0Mi41ODEgMTA0LjI0SDYyMy41ODJWMTA0LjA5OFpNNjQ0LjI4MyA5MS45MDVDNjUyLjc5IDkxLjkwNSA2NTkuNTk2IDkwLjc3MDggNjY0LjQxNiA4OC4zNjA1QzY2OC42NyA4Ni4yMzM4IDY3MS45MzEgODMuMjU2NCA2NzQuMDU4IDc5LjE0NDhDNjc2LjE4NSA3NS4xNzUgNjc3LjMxOSA2OS45MjkxIDY3Ny4zMTkgNjMuNjkwN0M2NzcuMzE5IDYwLjQyOTggNjc2Ljg5NCA1Ny40NTI1IDY3Ni4xODUgNTQuOTAwNEM2NzUuNDc2IDUyLjIwNjYgNjc0LjQ4MyA0OS45MzgxIDY3My4wNjUgNDcuOTUzMkM2NzEuNjQ3IDQ1Ljk2ODMgNjcwLjA4OCA0NC4xMjUxIDY2OC4xMDMgNDIuNzA3M0M2NjYuMTE4IDQxLjI4OTUgNjYzLjk5MSA0MC4wMTM1IDY2MS41ODEgMzkuMDIxMUM2NTkuMzEyIDM4LjE3MDQgNjU2Ljc2IDM3LjQ2MTUgNjU0LjA2NiAzNy4xNzc5QzY1MS4yMyAzNi43NTI2IDY0OC4xMTEgMzYuNjEwOCA2NDQuNzA4IDM2LjYxMDhINjM4LjMyOFY5MS45MDVINjQ0LjI4M1oiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTcwMC40MyAxMDQuMDk4VjI0LjI3NTlINzE1LjAzNFYxMDQuMDk4SDcwMC40M1oiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTc3Mi42IDgzLjgyMzhINzQyLjU0MUw3MzQuNzQzIDEwNC4yNEg3MTkuMTQ2TDc1MC45MDcgMjQuNDE4SDc2NC4yMzVMNzk1Ljk5NSAxMDQuMjRINzgwLjU0TDc3Mi42IDgzLjgyMzhaTTc1Ny40MjkgNDMuNDE2NUM3NTQuNTkzIDUxLjc4MTUgNzUyLjE4MyA1OC43Mjg3IDc0OS45MTQgNjQuMzk5OUw3NDcuMjIgNzEuNDg4OUg3NjcuOTIxTDc2NS4yMjcgNjQuMzk5OUM3NjMuMSA1OC43Mjg3IDc2MC41NDggNTEuNzgxNSA3NTcuNzEyIDQzLjQxNjVINzU3LjQyOVoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTgxNC41NjkgMjQuMjc1OVY5MS45MDVIODUyLjAwMVYxMDQuMDk4SDc5OS45NjVWMjQuMjc1OUg4MTQuNTY5WiIgZmlsbD0iI0Y3RjBFRCIvPgo8L3N2Zz4K";
 
+// ── Deep Dive recommendation logic ────────────────────────────────────────────
+function getDeepRecs(modId, groupLabel, score) {
+  var isCritical = score < 2.5;
+  var isVulnerable = score >= 2.5 && score < 3.2;
+
+  var db = {
+    lei: {
+      "Vulnerabilidad & Confianza": {
+        lss: isCritical ? ["Sesiones estructuradas de After Action Review (AAR) para normalizar el error como aprendizaje","I2E™ OBSERVE: mapear fricciones de confianza en el equipo directivo"] : ["I2E™ DECODE: identificar el principio que bloquea la apertura entre líderes","Implementar check-ins de equipo con formato estructurado"],
+        belbin: isCritical ? ["Taller Belbin: identificar roles que inhiben la vulnerabilidad (Monitor Evaluador excesivo)","Coaching individual para líderes con perfil Especialista o Implementador muy cerrado"] : ["Sesión de retroalimentación cruzada basada en perfiles Belbin"],
+        leadership: isCritical ? ["Programa 'Psychological Safety' basado en trabajo de Amy Edmondson","Taller: 'El líder vulnerable: fortaleza a través de la apertura'","Coaching sistémico enfocado en confianza entre pares directivos"] : ["Taller de comunicación no violenta para el equipo directivo","Acuerdos de trabajo explícitos sobre cómo manejar desacuerdos"],
+      },
+      "Responsabilidad & Compromisos": {
+        lss: isCritical ? ["Implementar sistema de compromisos visibles (tablero de accountability directivo)","I2E™ EXECUTE: convertir compromisos en KPIs con ownership explícito"] : ["Rutinas de seguimiento peer-to-peer entre líderes","I2E™ SUSTAIN: governance de compromisos con revisión mensual"],
+        belbin: isCritical ? ["Identificar si hay déficit de perfil Finalizador en el equipo directivo","Taller: 'Accountability colectiva: cómo los roles Belbin impactan el cumplimiento'"] : ["Reforzar el rol de Implementador para traducir compromisos en acciones concretas"],
+        leadership: isCritical ? ["Programa de accountability ejecutiva: 'Leaders who deliver'","Intervención en cultura de impunidad directiva: conversaciones directas"] : ["Taller de feedback ejecutivo: cómo dar y recibir retroalimentación difícil"],
+      },
+      "Calidad de Decisiones": {
+        lss: isCritical ? ["Implementar A3 Thinking para decisiones estratégicas importantes","QFD aplicado a decisiones: traducir impacto en criterios ponderados","I2E™ DECODE: identificar qué sesgos sistemáticos afectan la calidad decisional"] : ["Estandarizar el proceso de toma de decisiones con datos y análisis estructurado"],
+        belbin: isCritical ? ["Asegurar presencia de Monitor Evaluador y Cerebro en decisiones críticas","Taller: 'Decisiones de calidad: cómo la diversidad de roles reduce el sesgo'"] : ["Aprovechar perfil Especialista para profundizar el análisis antes de decidir"],
+        leadership: isCritical ? ["Programa de pensamiento crítico y decisiones bajo incertidumbre","Taller: 'De la opinión a la evidencia: liderazgo basado en datos'"] : ["Implementar devil's advocate estructurado en reuniones de decisión"],
+      },
+      "Gestión de Conflictos": {
+        lss: isCritical ? ["I2E™ OBSERVE: mapear los patrones de conflicto recurrentes en el equipo","Definir protocolo estructurado de resolución de conflictos directivos"] : ["I2E™ ADAPT: adecuar el modelo de gestión de conflictos a la cultura actual"],
+        belbin: isCritical ? ["Taller Belbin: entender cómo los roles generan tensiones naturales y productivas","Identificar si Cohesionador está ausente — rol clave para gestión de conflictos"] : ["Usar perfiles Belbin como lenguaje neutral para abordar diferencias"],
+        leadership: isCritical ? ["Facilitación externa de conversaciones difíciles pendientes","Programa de negociación y gestión de conflictos para C-Suite","Taller: 'Conflicto productivo: de la evasión al debate sano'"] : ["Taller de mediación interna para líderes de área"],
+      },
+      "Desarrollo de Personas": {
+        lss: isCritical ? ["I2E™ EXECUTE: convertir el desarrollo de personas en procesos, rutinas y KPIs medibles","Implementar sistema de feedback 360° estructurado para todos los líderes"] : ["I2E™ SCALE: replicar el modelo de desarrollo de personas en toda la organización"],
+        belbin: isCritical ? ["Usar Belbin como base del plan de desarrollo individual de cada líder","Taller: 'Líderes que desarrollan líderes: el rol del Cohesionador y el Coordinador'"] : ["Programa de mentoring cruzado basado en complementariedad de roles Belbin"],
+        leadership: isCritical ? ["Programa de liderazgo de desarrollo: 'Growing Others'","Implementar conversaciones de carrera estructuradas trimestrales","Taller: 'El líder coach: de dar respuestas a hacer preguntas'"] : ["Desarrollar capacidad de feedback de alto impacto en líderes de primera línea"],
+      },
+      "Comunicación & Coherencia": {
+        lss: isCritical ? ["Estandarizar los mensajes clave del equipo directivo con frecuencia y formato definidos","I2E™ DECODE: identificar por qué los mensajes se distorsionan al bajar en la organización"] : ["Dashboard de comunicación interna con indicadores de penetración del mensaje"],
+        belbin: isCritical ? ["Identificar quién lidera la comunicación — Coordinador o Investigador de Recursos son ideales","Taller: 'Mensajes que mueven: cómo los roles Belbin impactan la comunicación'"] : ["Reforzar el rol de Cohesionador para asegurar consistencia del mensaje entre áreas"],
+        leadership: isCritical ? ["Programa de comunicación ejecutiva: claridad, consistencia y presencia","Taller: 'De la información a la inspiración: comunicación que genera acción'"] : ["Sesiones de alineación de mensajes antes de comunicaciones organizacionales clave"],
+      },
+      "Ejemplo & Valores": {
+        lss: isCritical ? ["I2E™ OBSERVE: identificar brechas entre valores declarados y comportamientos observables","Auditoría de comportamientos directivos vs. valores organizacionales"] : ["I2E™ SUSTAIN: asegurar ownership de los valores con mecanismos de gobernanza visibles"],
+        belbin: isCritical ? ["Taller: 'Liderazgo con ejemplo: cómo cada rol Belbin modela los valores'","Coaching individual enfocado en coherencia entre perfil y comportamiento"] : ["Sesión de reflexión grupal: cómo nuestros roles naturales expresan (o contradicen) los valores"],
+        leadership: isCritical ? ["Programa de integridad y liderazgo ético","Intervención en incoherencias visibles: facilitación de conversaciones directas","Taller: 'Walk the talk: del discurso a la acción'"] : ["Programa de líderes como embajadores culturales"],
+      },
+      "Liderazgo Colectivo": {
+        lss: isCritical ? ["I2E™ EXPERIMENT: pilotos de co-liderazgo en iniciativas transversales","Definir modelo operativo del equipo directivo: roles, decisiones, rutinas y métricas"] : ["I2E™ SCALE: institucionalizar el modelo de liderazgo colectivo en toda la organización"],
+        belbin: isCritical ? ["Diagnóstico Belbin completo del Comité Directivo con taller de integración","Rediseñar la composición del equipo directivo basado en complementariedad de roles","Taller intensivo: 'Del grupo de líderes al equipo directivo de alto rendimiento'"] : ["Sesión anual de revisión de dinámica de equipo con perfiles Belbin actualizados"],
+        leadership: isCritical ? ["Programa de team coaching para el Comité Directivo","Retiro estratégico de liderazgo colectivo con facilitación externa","Taller: 'Uno más uno es más que dos: el poder del liderazgo colectivo'"] : ["Programa de co-liderazgo en proyectos estratégicos transversales"],
+      },
+    },
+    tcs: {
+      "Alineación Estratégica": {
+        lss: isCritical ? ["QFD aplicado al equipo: traducir la visión en acuerdos operativos medibles","I2E™ DECODE: identificar qué impide que el equipo directivo comparta prioridades"] : ["Sesiones de calibración estratégica trimestral con el modelo QFD"],
+        belbin: isCritical ? ["Identificar si hay suficiente Coordinador para alinear visiones divergentes","Taller: 'Alineación estratégica desde los roles: quién une y quién diverge'"] : ["Aprovechar perfiles Cerebro para enriquecer la visión compartida"],
+        leadership: isCritical ? ["Retiro estratégico de alineación de visión y prioridades del equipo directivo","Taller: 'Una sola voz: cómo los equipos directivos alinean su estrategia'"] : ["Revisión anual de visión compartida con dinámica estructurada"],
+      },
+      "Confianza & Seguridad": {
+        lss: isCritical ? ["I2E™ OBSERVE: mapear los momentos donde la confianza se rompe en el equipo","Protocolo estructurado de recuperación de confianza tras incumplimientos"] : ["I2E™ ADAPT: adecuar el modelo de confianza a la cultura y historia del equipo"],
+        belbin: isCritical ? ["Taller Belbin de team building con foco en confianza interpersonal","Sesiones de retroalimentación cruzada entre roles complementarios"] : ["Usar Belbin para normalizar las diferencias y construir respeto mutuo"],
+        leadership: isCritical ? ["Programa de seguridad psicológica para el equipo directivo","Facilitación externa de conversaciones de confianza pendientes","Taller: 'Confianza como ventaja competitiva'"] : ["Check-ins de equipo mensuales con formato estructurado de apertura"],
+      },
+      "Responsabilidad Mutua": {
+        lss: isCritical ? ["Tablero de compromisos del equipo directivo con revisión semanal","I2E™ EXECUTE: formalizar la accountability mutua en rutinas y KPIs del equipo"] : ["Sistema de seguimiento peer-to-peer de compromisos directivos"],
+        belbin: isCritical ? ["Identificar déficit de Finalizador e Implementador en el equipo","Taller: 'Accountability de equipo: cómo los roles Belbin impactan el cumplimiento colectivo'"] : ["Reforzar comportamientos de Implementador para cerrar brechas de ejecución"],
+        leadership: isCritical ? ["Programa de accountability colectiva: 'We own it together'","Intervención en dinámicas de evasión de responsabilidad"] : ["Taller de feedback horizontal: cómo los pares se responsabilizan mutuamente"],
+      },
+      "Calidad de Decisiones": {
+        lss: isCritical ? ["Implementar metodología RAPID para clarificar roles en decisiones del equipo","QFD de decisiones: criterios ponderados para decisiones estratégicas del equipo","I2E™ EXPERIMENT: pilotos de nuevos modelos de toma de decisiones"] : ["Estandarizar el proceso decisional del equipo con datos y criterios explícitos"],
+        belbin: isCritical ? ["Asegurar Monitor Evaluador activo en decisiones críticas del equipo","Taller: 'Decisiones de equipo: cómo la diversidad de roles mejora la calidad'"] : ["Rotar el rol de devil's advocate entre miembros del equipo según perfil"],
+        leadership: isCritical ? ["Programa de pensamiento sistémico para el equipo directivo","Taller: 'Decisiones en equipo: velocidad vs. calidad'"] : ["Implementar post-mortem estructurado de decisiones importantes"],
+      },
+      "Debate & Conflicto Productivo": {
+        lss: isCritical ? ["I2E™ OBSERVE: identificar si el conflicto es evitado o mal gestionado","Definir reglas de debate productivo para reuniones del equipo directivo"] : ["Implementar dinámica de 'six thinking hats' en reuniones estratégicas"],
+        belbin: isCritical ? ["Taller: 'Tensiones productivas: cómo los roles Belbin generan el debate correcto'","Identificar si Cerebro e Investigador de Recursos tienen espacio para disentir"] : ["Crear espacio explícito para que perfiles Cerebro y Monitor Evaluador aporten perspectivas críticas"],
+        leadership: isCritical ? ["Facilitación externa de debates estratégicos pendientes","Taller: 'Del consenso falso al disenso productivo'"] : ["Programa de facilitación interna de debates estratégicos"],
+      },
+      "Complementariedad": {
+        lss: isCritical ? ["I2E™ DECODE: identificar qué impide que el equipo aproveche sus diferencias","Diagnóstico de capacidades del equipo vs. desafíos estratégicos actuales"] : ["I2E™ SCALE: replicar el modelo de aprovechamiento de complementariedad en equipos de proyecto"],
+        belbin: isCritical ? ["Diagnóstico Belbin completo + taller de complementariedad","Mapeo de fortalezas del equipo vs. brechas de roles críticos","Programa de desarrollo basado en roles ausentes o infrarrepresentados"] : ["Sesión anual de actualización de perfiles y revisión de dinámica de complementariedad"],
+        leadership: isCritical ? ["Taller: 'El todo es más que la suma: liderazgo desde la complementariedad'","Rediseño de responsabilidades basado en fortalezas individuales"] : ["Programa de apreciación de diversidad de estilos de liderazgo"],
+      },
+      "Orientación Colectiva": {
+        lss: isCritical ? ["I2E™ OBSERVE: mapear comportamientos de silo vs. comportamientos colectivos","Definir métricas de desempeño colectivo del equipo directivo"] : ["Implementar OKRs compartidos entre áreas para forzar orientación colectiva"],
+        belbin: isCritical ? ["Identificar perfiles con tendencia a optimizar solo su área (Especialista, Implementador)","Taller: 'Del yo al nosotros: cómo los roles Belbin pueden trabajar para el conjunto'"] : ["Programa de proyectos transversales que obligan a la colaboración inter-rol"],
+        leadership: isCritical ? ["Programa de liderazgo sistémico: ver la organización como un todo","Taller: 'Líderes que piensan en el sistema, no solo en su área'"] : ["Incluir métricas de colaboración transversal en la evaluación de desempeño directivo"],
+      },
+      "Efectividad del Equipo": {
+        lss: isCritical ? ["Diagnóstico completo de efectividad del equipo directivo con benchmarks externos","I2E™ EXPERIMENT + EXECUTE: pilotos de nuevas formas de trabajar como equipo"] : ["I2E™ SUSTAIN: asegurar evolución permanente del modelo de efectividad del equipo"],
+        belbin: isCritical ? ["Intervención integral Belbin: diagnóstico, taller, coaching individual y colectivo","Rediseño del equipo directivo basado en análisis de roles y resultados"] : ["Revisión anual de efectividad del equipo con actualización de perfiles Belbin"],
+        leadership: isCritical ? ["Programa de team coaching intensivo para el Comité Directivo","Retiro de efectividad de equipo con facilitación externa especializada"] : ["Programa de mejora continua de la efectividad del equipo directivo"],
+      },
+    },
+    eci: {
+      "Claridad de Roles": {
+        lss: isCritical ? ["RACI completo de los 10 procesos más críticos de la organización","I2E™ DECODE: identificar por qué los roles y responsabilidades son ambiguos"] : ["Actualizar y comunicar RACI con revisión trimestral"],
+        belbin: isCritical ? ["Taller Belbin: alinear roles formales con roles naturales de equipo","Identificar conflictos de rol entre perfiles Coordinador e Implementador"] : ["Usar Belbin para clarificar expectativas de contribución de cada persona"],
+        leadership: isCritical ? ["Programa de claridad organizacional: 'Who owns what'","Taller para líderes: cómo definir y comunicar responsabilidades con precisión"] : ["Implementar conversaciones de claridad de rol en cada equipo"],
+      },
+      "Gestión de Indicadores": {
+        lss: isCritical ? ["QFD para diseñar el cuadro de mando operativo: de objetivos a indicadores accionables","Implementar tableros visuales por área con semáforos de desempeño","I2E™ EXECUTE: convertir los indicadores en rutinas de gestión diaria"] : ["Evolucionar de KPIs reactivos a leading indicators por proceso"],
+        belbin: isCritical ? ["Identificar quién es responsable de los indicadores — Implementador o Finalizador ideales","Taller: 'Métricas que importan: cómo cada rol Belbin usa los datos de forma diferente'"] : ["Programa de alfabetización de datos para todos los roles del equipo"],
+        leadership: isCritical ? ["Programa de liderazgo basado en datos: 'Managing by metrics'","Taller: 'Del reporte al resultado: cómo los líderes usan los indicadores para decidir'"] : ["Implementar cultura de datos en cada área con líderes como modelos"],
+      },
+      "Rutinas de Seguimiento": {
+        lss: isCritical ? ["Implementar Lean Daily Management completo: reuniones diarias + tableros + escalamiento","I2E™ EXPERIMENT: piloto de nuevas rutinas de seguimiento en el área más crítica"] : ["Optimizar la cadencia y formato de las reuniones de seguimiento existentes"],
+        belbin: isCritical ? ["Asignar responsabilidad de facilitación de rutinas según perfil Cohesionador o Coordinador","Taller: 'Rituales de equipo: cómo los roles Belbin hacen que el seguimiento funcione'"] : ["Rotar la facilitación de rutinas para desarrollar capacidad en diferentes perfiles"],
+        leadership: isCritical ? ["Programa de disciplina operativa para líderes de primera línea","Taller: 'El poder de las rutinas: cómo los líderes crean hábitos organizacionales'"] : ["Coaching de líderes en facilitación de reuniones de alta efectividad"],
+      },
+      "Decisiones con Datos": {
+        lss: isCritical ? ["Programa de data literacy para equipos operativos y de gestión","QFD inverso: de indicadores a decisiones operativas clave","I2E™ DECODE: identificar por qué los datos no se usan para decidir"] : ["Implementar análisis de varianza mensual con acciones correctivas estructuradas"],
+        belbin: isCritical ? ["Identificar déficit de Monitor Evaluador en equipos de gestión","Taller: 'Datos y roles: cómo cada perfil Belbin se relaciona con la evidencia'"] : ["Programa de desarrollo de Monitor Evaluador interno en cada área"],
+        leadership: isCritical ? ["Programa: 'Evidence-based leadership' para el equipo directivo","Taller: 'De la intuición a la evidencia: decisiones que sostienen resultados'"] : ["Implementar revisiones de decisiones pasadas con datos para aprender"],
+      },
+      "Resolución de Problemas": {
+        lss: isCritical ? ["Programa Yellow Belt / Green Belt en resolución estructurada de problemas","Implementar A3 Thinking como metodología estándar","I2E™ EXPERIMENT: aplicar PDCA acelerado en los 3 problemas más recurrentes"] : ["Implementar sistema de lecciones aprendidas con difusión estructurada"],
+        belbin: isCritical ? ["Identificar quién lidera la resolución de problemas — Cerebro + Implementador ideales","Taller: 'Problem-solving en equipo: cómo los roles Belbin aportan perspectivas distintas'"] : ["Crear equipos multidisciplinarios de resolución de problemas con diversidad de roles"],
+        leadership: isCritical ? ["Programa de liderazgo resolutivo: 'Leaders who solve'","Taller: 'Cómo los líderes crean culturas de resolución de problemas'"] : ["Coaching de líderes en facilitación de sesiones de resolución de problemas"],
+      },
+      "Escalamiento": {
+        lss: isCritical ? ["Definir protocolo de escalamiento con tiempos, triggers y responsables","I2E™ EXECUTE: formalizar el proceso de escalamiento en rutinas y KPIs"] : ["Optimizar los criterios de escalamiento para reducir tiempos de respuesta"],
+        belbin: isCritical ? ["Identificar quién debe escalar — Cohesionador e Implementador clave","Taller: 'Cuándo escalar: el rol de cada perfil en la gestión de problemas críticos'"] : ["Desarrollar la capacidad de juicio de cuándo escalar en perfiles Especialista"],
+        leadership: isCritical ? ["Programa de gestión de escalamientos para líderes","Taller: 'Empoderar sin abandonar: cómo los líderes gestionan el escalamiento'"] : ["Implementar cultura de escalamiento temprano como práctica de alto rendimiento"],
+      },
+      "Ejecución de Proyectos": {
+        lss: isCritical ? ["Implementar PMO ligera con metodología Lean de gestión de proyectos","I2E™ EXECUTE: estándares de proyecto con roles, KPIs y rutinas de seguimiento","Programa de gestión de riesgos con FMEA para proyectos críticos"] : ["Estandarizar el proceso de revisión de avance de proyectos estratégicos"],
+        belbin: isCritical ? ["Asignar roles Belbin en cada proyecto: Coordinador, Implementador, Finalizador, Monitor Evaluador","Taller: 'Equipos de proyecto de alto rendimiento: la fórmula Belbin'"] : ["Revisión de composición de equipos de proyecto con análisis de roles"],
+        leadership: isCritical ? ["Programa de liderazgo de proyectos: 'Delivering on time, on budget, on scope'","Taller: 'El patrocinador ejecutivo: cómo los líderes garantizan el éxito de los proyectos'"] : ["Coaching de project managers en liderazgo sin autoridad formal"],
+      },
+      "Disciplina Operativa": {
+        lss: isCritical ? ["Implementación completa de 5S + estandarización de procesos críticos","I2E™ SUSTAIN: governance de la disciplina operativa con ownership y revisión permanente","Programa de auditorías de proceso con ciclo PDCA de mejora"] : ["I2E™ SCALE: replicar el modelo de disciplina operativa en todas las áreas"],
+        belbin: isCritical ? ["Identificar déficit de Finalizador e Implementador — roles críticos para la disciplina","Taller: 'La disciplina como cultura: cómo los roles Belbin sostienen los estándares'"] : ["Programa de desarrollo de Finalizador interno en áreas críticas"],
+        leadership: isCritical ? ["Programa de liderazgo operativo: 'Discipline is freedom'","Taller: 'Cómo los líderes crean y sostienen culturas de disciplina operativa'"] : ["Coaching de líderes en gestión del desempeño y estándares operativos"],
+      },
+    },
+    aci: {
+      "Aprendizaje Organizacional": {
+        lss: isCritical ? ["I2E™ OBSERVE + DECODE: mapear cómo aprende (o no aprende) la organización","Implementar sistema de lecciones aprendidas con difusión estructurada","Ciclos de retrospectiva mensual por área con formato AAR"] : ["I2E™ SCALE: institucionalizar el aprendizaje como proceso organizacional"],
+        belbin: isCritical ? ["Identificar Cerebro e Investigador de Recursos como motores del aprendizaje","Taller: 'Organizaciones que aprenden: el rol de cada perfil Belbin'"] : ["Programa de aprendizaje entre pares basado en complementariedad de roles"],
+        leadership: isCritical ? ["Programa de liderazgo de aprendizaje: 'Learning organizations start with leaders'","Taller: 'Cómo los líderes crean culturas de aprendizaje continuo'"] : ["Desarrollar rituales de aprendizaje liderados por el equipo directivo"],
+      },
+      "Cuestionamiento de Supuestos": {
+        lss: isCritical ? ["I2E™ DECODE: metodología para identificar y cuestionar supuestos organizacionales","Taller de pensamiento crítico aplicado a procesos y modelos de negocio"] : ["Implementar sesiones de 'Kill the company' para identificar vulnerabilidades"],
+        belbin: isCritical ? ["Crear espacio explícito para que Monitor Evaluador y Cerebro cuestionen el status quo","Taller: 'El rol del disruptor: cómo los perfiles Belbin cuestionan los supuestos'"] : ["Rotar el rol de 'abogado del diablo' en revisiones estratégicas"],
+        leadership: isCritical ? ["Programa de liderazgo adaptativo: distinguir trabajo técnico de trabajo adaptativo","Taller: 'Preguntas que cambian organizaciones: el arte del cuestionamiento ejecutivo'"] : ["Desarrollar la capacidad de cuestionamiento constructivo en líderes de primera línea"],
+      },
+      "Experimentación": {
+        lss: isCritical ? ["I2E™ EXPERIMENT: metodología de pilotos rápidos con criterios claros de éxito/fracaso","Implementar Design Sprints para iniciativas de innovación","Programa de MVPs internos: cómo probar antes de invertir"] : ["I2E™ SCALE: estandarizar el proceso de experimentación en toda la organización"],
+        belbin: isCritical ? ["Crear equipos de experimentación con Cerebro, Investigador de Recursos e Implementador","Taller: 'Equipos de innovación: la combinación de roles que hace que los experimentos funcionen'"] : ["Programa de emprendimiento interno basado en perfiles Belbin complementarios"],
+        leadership: isCritical ? ["Programa de liderazgo de innovación: 'Leaders who experiment'","Taller: 'Cómo los líderes crean las condiciones para que la experimentación florezca'"] : ["Desarrollar tolerancia al fracaso como competencia de liderazgo"],
+      },
+      "Innovación": {
+        lss: isCritical ? ["I2E™ completo: Observe → Decode → Adapt → Experiment → Execute → Scale → Sustain","Implementar sistema de gestión de ideas con pipeline de innovación","QFD de innovación: de necesidades del cliente a iniciativas de valor"] : ["I2E™ SUSTAIN: asegurar que la innovación sea un proceso permanente, no un evento"],
+        belbin: isCritical ? ["Diagnóstico Belbin del equipo de innovación con análisis de complementariedad","Taller: 'Del brainstorming al breakthrough: cómo los roles Belbin innovan juntos'","Identificar déficit de Cerebro e Investigador de Recursos en equipos de innovación"] : ["Programa de innovación abierta con equipos multidisciplinarios Belbin"],
+        leadership: isCritical ? ["Programa de liderazgo innovador: 'Ambidextrous leadership'","Taller: 'Cómo los líderes equilibran la explotación y la exploración'"] : ["Desarrollar líderes como patrocinadores activos de la innovación"],
+      },
+      "Liderazgo del Cambio": {
+        lss: isCritical ? ["Programa de gestión del cambio con metodología ADKAR o Prosci","I2E™ ADAPT: traducir la iniciativa de cambio al contexto real de cultura y capacidades","Mapeo de stakeholders y plan de gestión de resistencia"] : ["I2E™ EXECUTE: convertir la gestión del cambio en procesos y KPIs medibles"],
+        belbin: isCritical ? ["Identificar quién puede ser embajador del cambio según perfil Belbin","Taller: 'Liderazgo del cambio desde los roles: quién facilita y quién resiste'"] : ["Usar Belbin para diseñar equipos de cambio con la complementariedad correcta"],
+        leadership: isCritical ? ["Programa de liderazgo transformacional: 'Leading change from the front'","Taller: 'Cómo los líderes crean urgencia, visión y coalición para el cambio'","Coaching ejecutivo en comunicación de cambio"] : ["Desarrollar la capacidad de liderazgo del cambio en gerentes de primera línea"],
+      },
+      "Resiliencia Organizacional": {
+        lss: isCritical ? ["Plan de continuidad del negocio con análisis de riesgos y FMEA","I2E™ OBSERVE: escanear el entorno para anticipar disrupciones","I2E™ EXPERIMENT: simular escenarios de crisis y probar respuestas"] : ["I2E™ SUSTAIN: asegurar que la capacidad de resiliencia evolucione permanentemente"],
+        belbin: isCritical ? ["Crear equipos de respuesta a crisis con diversidad de roles Belbin","Taller: 'Equipos resilientes: la combinación de roles que sostiene la presión'"] : ["Programa de simulacros de crisis con equipos multidisciplinarios"],
+        leadership: isCritical ? ["Programa de liderazgo en crisis: 'Steady hand in the storm'","Taller: 'Cómo los líderes mantienen la calma y el foco en la incertidumbre'"] : ["Desarrollar la capacidad de liderazgo adaptativo en todos los niveles"],
+      },
+    },
+    cei: {
+      "Colaboración & Conocimiento": {
+        lss: isCritical ? ["I2E™ OBSERVE: mapear silos de conocimiento y barreras de colaboración","Implementar comunidades de práctica por área de conocimiento clave"] : ["I2E™ SCALE: replicar el modelo de colaboración en toda la organización"],
+        belbin: isCritical ? ["Taller Belbin cross-funcional: equipos de diferentes áreas trabajando juntos","Identificar quién puede ser conector de conocimiento — Investigador de Recursos e Cohesionador"] : ["Programa de rotación de roles para transferencia de conocimiento"],
+        leadership: isCritical ? ["Programa de liderazgo colaborativo: 'Breaking silos'","Taller: 'Cómo los líderes crean puentes entre áreas'"] : ["Incluir métricas de colaboración en la evaluación de desempeño de líderes"],
+      },
+      "Comunicación & Transparencia": {
+        lss: isCritical ? ["I2E™ DECODE: identificar por qué la información no fluye libremente","Diseñar arquitectura de comunicación interna: canales, frecuencias y responsables"] : ["Dashboard de comunicación interna con indicadores de efectividad"],
+        belbin: isCritical ? ["Identificar Investigador de Recursos y Cohesionador como facilitadores de la comunicación","Taller: 'Comunicación efectiva desde los roles: quién informa, quién conecta, quién cierra'"] : ["Programa de comunicación interna liderado por embajadores culturales"],
+        leadership: isCritical ? ["Programa de transparencia ejecutiva: 'Open book management'","Taller: 'Cómo los líderes construyen culturas de comunicación abierta'"] : ["Town halls regulares con espacio para preguntas difíciles"],
+      },
+      "Empoderamiento": {
+        lss: isCritical ? ["I2E™ ADAPT: adecuar el nivel de empoderamiento a la madurez real de cada equipo","Definir matriz de delegación con niveles de autoridad claros por rol"] : ["I2E™ EXECUTE: convertir el empoderamiento en procesos, KPIs y rituales de gestión"],
+        belbin: isCritical ? ["Identificar si el liderazgo tiene perfil Implementador muy controlador que bloquea la autonomía","Taller: 'Empoderamiento desde los roles: quién puede volar y quién necesita estructura'"] : ["Programa de desarrollo de autonomía progresiva basado en madurez de roles"],
+        leadership: isCritical ? ["Programa de liderazgo delegador: 'Leaders who let go'","Taller: 'Del control al empoderamiento: el viaje del líder'"] : ["Coaching de líderes en delegación efectiva y gestión de la autonomía"],
+      },
+      "Reconocimiento": {
+        lss: isCritical ? ["Diseñar sistema de reconocimiento formal e informal ligado a valores y comportamientos","I2E™ EXECUTE: convertir el reconocimiento en un proceso con frecuencia y responsables"] : ["I2E™ SUSTAIN: asegurar que el sistema de reconocimiento evolucione y se mantenga relevante"],
+        belbin: isCritical ? ["Usar Belbin para personalizar el reconocimiento: cada rol valora ser reconocido de forma diferente","Taller: 'Reconocimiento que funciona: cómo hablar el idioma de cada perfil'"] : ["Programa de reconocimiento peer-to-peer con lenguaje Belbin"],
+        leadership: isCritical ? ["Programa de liderazgo apreciativo: 'Leaders who celebrate'","Taller: 'El poder del reconocimiento: cómo los líderes construyen equipos motivados'"] : ["Desarrollar el hábito del reconocimiento específico y oportuno en líderes de primera línea"],
+      },
+      "Seguridad Psicológica": {
+        lss: isCritical ? ["I2E™ OBSERVE: medir y mapear el nivel de seguridad psicológica por equipo y área","Implementar protocolo de gestión de errores sin culpa (blameless post-mortems)"] : ["I2E™ SCALE: institucionalizar la seguridad psicológica como estándar de liderazgo"],
+        belbin: isCritical ? ["Taller Belbin de seguridad psicológica: cómo cada rol puede inhibir o promover la apertura","Identificar líderes con perfiles que pueden intimidar — Cerebro, Especialista fuerte"] : ["Sesiones de retroalimentación anónima para medir percepción de seguridad por equipo"],
+        leadership: isCritical ? ["Programa intensivo de seguridad psicológica basado en Amy Edmondson","Taller: 'El líder que crea seguridad: de la evaluación a la curiosidad'","Intervención en comportamientos de liderazgo que destruyen la seguridad"] : ["Coaching de líderes en creación de ambientes de apertura y confianza"],
+      },
+      "Orientación a Resultados": {
+        lss: isCritical ? ["QFD para alinear objetivos de área con resultados organizacionales","Implementar OKRs con revisión quincenal y ajuste dinámico","I2E™ EXECUTE: convertir la orientación a resultados en rutinas y KPIs medibles"] : ["I2E™ SCALE: replicar la cultura de resultados en toda la organización con estándares claros"],
+        belbin: isCritical ? ["Identificar si hay déficit de Implementador y Finalizador que expliquen la falta de orientación a resultados","Taller: 'Equipos orientados a resultados: el rol de cada perfil Belbin'"] : ["Programa de desarrollo de ownership de resultados en todos los niveles"],
+        leadership: isCritical ? ["Programa de liderazgo de alto rendimiento: 'Leaders who deliver results'","Taller: 'Cómo los líderes construyen culturas de excelencia y estándares altos'"] : ["Coaching de líderes en gestión del desempeño y conversaciones de resultados"],
+      },
+    },
+  };
+
+  var modRecs = db[modId];
+  if (!modRecs) return { lss: [], belbin: [], leadership: [] };
+  var groupRecs = modRecs[groupLabel];
+  if (!groupRecs) return { lss: [], belbin: [], leadership: [] };
+  return groupRecs;
+}
+
+
 async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_MODULES, computeOPRI, computeDeep, checkL2, checkL3) {
   var coreRR = allResponses.filter(function(r) { return r.survey === "core"; });
   var fullRR = allResponses.filter(function(r) { return r.survey === "full"; });
@@ -2235,19 +2495,36 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     var deepRR = allResponses.filter(function(r) { return r.survey === "deep_" + m.id; });
     var deepSc = computeDeep(deepRR, m);
     if (!deepSc) return '';
-    var groupBars = m.groups.map(function(g) {
-      var sc = deepSc.groupScores[g.label];
+
+    // Sort groups by score ascending to highlight weakest
+    var groupsSorted = m.groups.map(function(g) {
+      return { g: g, sc: deepSc.groupScores[g.label] };
+    }).sort(function(a, b) { return (a.sc || 5) - (b.sc || 5); });
+
+    var groupBars = groupsSorted.map(function(item) {
+      var g = item.g; var sc = item.sc;
       var mat = sc != null ? getM(sc) : null;
       var pct = sc != null ? (sc / 5 * 100).toFixed(1) : 0;
-      return '<div style="margin-bottom:8px">' +
-        '<div style="display:flex;justify-content:space-between;margin-bottom:2px">' +
-          '<span style="font-size:11px;color:' + CHARCOAL + '">' + g.label + '</span>' +
-          '<span style="font-size:11px;font-weight:700;color:' + (mat ? mat.color : MUTED) + '">' + (sc != null ? sc.toFixed(2) : '—') + '</span>' +
+      var recs = sc != null ? getDeepRecs(m.id, g.label, sc) : null;
+      var recsHtml = '';
+      if (recs && sc < 3.5) {
+        recsHtml = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;padding:10px;background:#F9F9F7;border-radius:8px">' +
+          recBlock("🔧 LSS / I2E™", recs.lss.slice(0,2), "#EFF6FF", BLUE) +
+          recBlock("👥 Belbin", recs.belbin.slice(0,2), "#F5F3FF", VIOLET) +
+          recBlock("🎯 Leadership", recs.leadership.slice(0,2), "#F0FDF4", GREEN) +
+        '</div>';
+      }
+      return '<div style="margin-bottom:' + (recsHtml ? '14' : '8') + 'px;padding-bottom:' + (recsHtml ? '14' : '0') + 'px;border-bottom:1px solid #F3F4F6">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:3px">' +
+          '<span style="font-size:12px;color:' + CHARCOAL + ';font-weight:600">' + g.label + '</span>' +
+          '<span style="font-size:12px;font-weight:700;color:' + (mat ? mat.color : MUTED) + '">' + (sc != null ? sc.toFixed(2) : '—') + (mat ? ' · <span style="font-size:9px;font-weight:700">' + mat.es + '</span>' : '') + '</span>' +
         '</div>' +
-        '<div style="background:#E5E7EB;border-radius:99px;height:6px"><div style="width:' + pct + '%;height:100%;background:' + m.color + ';border-radius:99px"></div></div>' +
+        '<div style="background:#E5E7EB;border-radius:99px;height:6px;margin-bottom:2px"><div style="width:' + pct + '%;height:100%;background:' + (mat ? mat.color : m.color) + ';border-radius:99px"></div></div>' +
+        recsHtml +
       '</div>';
     }).join('');
-    return '<div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden">' +
+
+    return '<div style="page-break-inside:avoid;margin-bottom:28px;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden">' +
       '<div style="background:' + m.color + ';padding:14px 18px;display:flex;align-items:center;justify-content:space-between">' +
         '<div>' +
           '<div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600">' + m.index + '</div>' +
