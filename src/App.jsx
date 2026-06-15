@@ -686,13 +686,30 @@ function DoneScreen({ title, color, onBack, onNew }) {
   );
 }
 
+// ── Meta persistence helpers ──────────────────────────────────────────────────
+var META_KEY = "opri_respondent_meta";
+function loadSavedMeta() {
+  try { var v = localStorage.getItem(META_KEY); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+}
+function saveMeta(meta) {
+  try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {}
+}
+function clearSavedMeta() {
+  try { localStorage.removeItem(META_KEY); } catch (e) {}
+}
+
 // ── OPRI Survey (Core & Full) ─────────────────────────────────────────────────
 function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany }) {
   const isCore = level === "core";
   const dims = isCore ? CORE_DIMS : FULL_DIMS;
   const allQs = [];
   dims.forEach(function(d) { d.questions.forEach(function(q) { allQs.push(q); }); });
-  const [meta, setMeta] = useState(null);
+
+  // Pre-load saved meta so the Full 60 skips the profile form
+  var savedMeta = loadSavedMeta();
+  var initialMeta = (!isCore && savedMeta) ? savedMeta : null;
+
+  const [meta, setMeta] = useState(initialMeta);
   const [dimIdx, setDimIdx] = useState(0);
   const [answers, setAnswers] = useState({});
   const [done, setDone] = useState(false);
@@ -707,11 +724,16 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany }) {
     onDone();
   }
 
+  function handleStart(m) {
+    if (isCore) saveMeta(m); // persist on Core so Full can reuse it
+    setMeta(m);
+  }
+
   if (done) {
-    return <DoneScreen title={isCore ? "OPRI Core 25" : "OPRI Full 60"} color={GREEN} onBack={onBack} onNew={function() { setMeta(null); setDimIdx(0); setAnswers({}); setDone(false); }} />;
+    return <DoneScreen title={isCore ? "OPRI Core 25" : "OPRI Full 60"} color={GREEN} onBack={onBack} onNew={function() { clearSavedMeta(); setMeta(null); setDimIdx(0); setAnswers({}); setDone(false); }} />;
   }
   if (!meta) {
-    return <MetaForm title={isCore ? "OPRI Core 25" : "OPRI Full 60"} subtitle={isCore ? "25 preguntas · ~8 min" : "60 preguntas · ~18 min"} onStart={setMeta} presetCompany={presetCompany} />;
+    return <MetaForm title={isCore ? "OPRI Core 25" : "OPRI Full 60"} subtitle={isCore ? "25 preguntas · ~8 min" : "60 preguntas · ~18 min"} onStart={handleStart} presetCompany={presetCompany} />;
   }
 
   const dim = dims[dimIdx];
@@ -740,10 +762,13 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany }) {
 }
 
 // ── Deep Dive Survey ──────────────────────────────────────────────────────────
-function DeepSurvey({ mod, onDone, onBack }) {
+function DeepSurvey({ mod, onDone, onBack, engagementCode }) {
   const allQs = [];
   mod.groups.forEach(function(g) { g.qs.forEach(function(q) { allQs.push(q); }); });
-  const [meta, setMeta] = useState(null);
+
+  // Reuse meta saved during Core 25 — no need to ask again
+  var savedMeta = loadSavedMeta();
+  const [meta, setMeta] = useState(savedMeta || null);
   const [groupIdx, setGroupIdx] = useState(0);
   const [answers, setAnswers] = useState({});
   const [done, setDone] = useState(false);
@@ -752,17 +777,17 @@ function DeepSurvey({ mod, onDone, onBack }) {
   async function submit() {
     setSaving(true);
     const id = "R_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
-    await saveResponse({ id: id, timestamp: new Date().toISOString(), survey: "deep_" + mod.id, meta: meta, answers: answers });
+    await saveResponse({ id: id, timestamp: new Date().toISOString(), survey: "deep_" + mod.id, meta: meta, answers: answers, engagement_code: engagementCode || "" });
     setSaving(false);
     setDone(true);
     onDone();
   }
 
   if (done) {
-    return <DoneScreen title={mod.fullName} color={mod.color} onBack={onBack} onNew={function() { setMeta(null); setGroupIdx(0); setAnswers({}); setDone(false); }} />;
+    return <DoneScreen title={mod.fullName} color={mod.color} onBack={onBack} onNew={function() { clearSavedMeta(); setMeta(null); setGroupIdx(0); setAnswers({}); setDone(false); }} />;
   }
   if (!meta) {
-    return <MetaForm title={mod.index + " — " + mod.name} subtitle={mod.fullName + " · " + allQs.length + " preguntas"} onStart={setMeta} />;
+    return <MetaForm title={mod.index + " — " + mod.name} subtitle={mod.fullName + " · " + allQs.length + " preguntas"} onStart={function(m) { saveMeta(m); setMeta(m); }} />;
   }
 
   const grp = mod.groups[groupIdx];
@@ -1613,6 +1638,10 @@ function EngagementSurveyPage({ code }) {
   const coreScores = computeOPRI(coreRR, CORE_DIMS);
   const fullScores = computeOPRI(fullRR, FULL_DIMS);
   const l2 = checkL2(coreScores);
+  const l3 = checkL3(fullScores);
+  const activeMods = DEEP_MODULES.filter(function(m) { return l3.mods.indexOf(m.id) >= 0; });
+  const deepCounts = {};
+  DEEP_MODULES.forEach(function(m) { deepCounts[m.id] = responses.filter(function(r) { return r.survey === "deep_" + m.id; }).length; });
 
   function renderSurvey() {
     if (!activeSurvey) {
@@ -1630,11 +1659,26 @@ function EngagementSurveyPage({ code }) {
               <div style={{ fontSize: 12, color: GREEN_MID }}>Sus resultados han sido registrados. Gracias por participar.</div>
             </div>
           )}
+          {fullRR.length > 0 && activeMods.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 10, color: MUTED, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 7 }}>
+                {"Level 3 — Deep Dive" + (l3.fdd ? " · Full Deep Dive activado" : "")}
+              </div>
+              {activeMods.map(function(m) {
+                const qCount = m.groups.reduce(function(sum, g) { return sum + g.qs.length; }, 0);
+                const trigger = l3.reasons.find(function(r) { return r.indexOf(m.code) >= 0 || r.indexOf("Full Deep Dive") >= 0; });
+                return (
+                  <SurveyCard key={m.id} level={m.index} badge={deepCounts[m.id] > 0 ? deepCounts[m.id] + " resp." : "Activado"} label={m.fullName} desc={qCount + " preguntas"} color={m.color} status="activated" triggers={trigger ? [trigger] : []} onClick={function() { setActiveSurvey({ id: "deep_" + m.id, mod: m }); }} />
+                );
+              })}
+            </div>
+          )}
         </div>
       );
     }
     if (activeSurvey.id === "core") return <OPRISurvey level="core" engagementCode={code} presetCompany={engagement.company} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
     if (activeSurvey.id === "full") return <OPRISurvey level="full" engagementCode={code} presetCompany={engagement.company} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
+    if (activeSurvey.mod) return <DeepSurvey mod={activeSurvey.mod} engagementCode={code} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
     return null;
   }
 
@@ -1738,7 +1782,7 @@ export default function App() {
       return <OPRISurvey level="full" onDone={loadData} onBack={function() { setActiveSurvey(null); }} />;
     }
     if (activeSurvey.mod) {
-      return <DeepSurvey mod={activeSurvey.mod} onDone={loadData} onBack={function() { setActiveSurvey(null); }} />;
+      return <DeepSurvey mod={activeSurvey.mod} onDone={loadData} onBack={function() { setActiveSurvey(null); }} engagementCode={""} />;
     }
     return null;
   }
