@@ -699,15 +699,15 @@ function clearSavedMeta() {
 }
 
 // ── OPRI Survey (Core & Full) ─────────────────────────────────────────────────
-function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany }) {
+function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inheritedMeta, onMetaSaved }) {
   const isCore = level === "core";
   const dims = isCore ? CORE_DIMS : FULL_DIMS;
   const allQs = [];
   dims.forEach(function(d) { d.questions.forEach(function(q) { allQs.push(q); }); });
 
-  // Pre-load saved meta so the Full 60 skips the profile form
-  var savedMeta = loadSavedMeta();
-  var initialMeta = (!isCore && savedMeta) ? savedMeta : null;
+  // Use inheritedMeta (passed from parent) or localStorage fallback
+  var storedMeta = loadSavedMeta();
+  var initialMeta = isCore ? null : (inheritedMeta || storedMeta || null);
 
   const [meta, setMeta] = useState(initialMeta);
   const [dimIdx, setDimIdx] = useState(0);
@@ -725,7 +725,10 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany }) {
   }
 
   function handleStart(m) {
-    if (isCore) saveMeta(m); // persist on Core so Full can reuse it
+    if (isCore) {
+      saveMeta(m); // localStorage fallback
+      if (onMetaSaved) onMetaSaved(m); // pass to parent state
+    }
     setMeta(m);
   }
 
@@ -762,13 +765,13 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany }) {
 }
 
 // ── Deep Dive Survey ──────────────────────────────────────────────────────────
-function DeepSurvey({ mod, onDone, onBack, engagementCode }) {
+function DeepSurvey({ mod, onDone, onBack, engagementCode, inheritedMeta }) {
   const allQs = [];
   mod.groups.forEach(function(g) { g.qs.forEach(function(q) { allQs.push(q); }); });
 
-  // Reuse meta saved during Core 25 — no need to ask again
-  var savedMeta = loadSavedMeta();
-  const [meta, setMeta] = useState(savedMeta || null);
+  // Use inheritedMeta from parent or localStorage fallback
+  var storedMeta = loadSavedMeta();
+  const [meta, setMeta] = useState(inheritedMeta || storedMeta || null);
   const [groupIdx, setGroupIdx] = useState(0);
   const [answers, setAnswers] = useState({});
   const [done, setDone] = useState(false);
@@ -1590,6 +1593,7 @@ function EngagementSurveyPage({ code }) {
   const [loading, setLoading] = useState(true);
   const [activeSurvey, setActiveSurvey] = useState(null);
   const [responses, setResponses] = useState([]);
+  const [savedMeta, setSavedMeta] = useState(null); // persists meta across levels
 
   useEffect(function() {
     async function init() {
@@ -1676,9 +1680,9 @@ function EngagementSurveyPage({ code }) {
         </div>
       );
     }
-    if (activeSurvey.id === "core") return <OPRISurvey level="core" engagementCode={code} presetCompany={engagement.company} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
-    if (activeSurvey.id === "full") return <OPRISurvey level="full" engagementCode={code} presetCompany={engagement.company} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
-    if (activeSurvey.mod) return <DeepSurvey mod={activeSurvey.mod} engagementCode={code} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
+    if (activeSurvey.id === "core") return <OPRISurvey level="core" engagementCode={code} presetCompany={engagement.company} onDone={handleDone} onMetaSaved={setSavedMeta} onBack={function() { setActiveSurvey(null); }} />;
+    if (activeSurvey.id === "full") return <OPRISurvey level="full" engagementCode={code} presetCompany={engagement.company} inheritedMeta={savedMeta} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
+    if (activeSurvey.mod) return <DeepSurvey mod={activeSurvey.mod} engagementCode={code} inheritedMeta={savedMeta} onDone={handleDone} onBack={function() { setActiveSurvey(null); }} />;
     return null;
   }
 
