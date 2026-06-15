@@ -688,6 +688,7 @@ function DoneScreen({ title, color, onBack, onNew }) {
 
 // ── Meta persistence helpers ──────────────────────────────────────────────────
 var META_KEY = "opri_respondent_meta";
+var DONE_KEY = "opri_respondent_done";
 function loadSavedMeta() {
   try { var v = localStorage.getItem(META_KEY); return v ? JSON.parse(v) : null; } catch (e) { return null; }
 }
@@ -695,7 +696,16 @@ function saveMeta(meta) {
   try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {}
 }
 function clearSavedMeta() {
-  try { localStorage.removeItem(META_KEY); } catch (e) {}
+  try { localStorage.removeItem(META_KEY); localStorage.removeItem(DONE_KEY); } catch (e) {}
+}
+function loadCompletedSurveys() {
+  try { var v = localStorage.getItem(DONE_KEY); return v ? JSON.parse(v) : []; } catch (e) { return []; }
+}
+function markSurveyDone(surveyId) {
+  try {
+    var done = loadCompletedSurveys();
+    if (done.indexOf(surveyId) < 0) { done.push(surveyId); localStorage.setItem(DONE_KEY, JSON.stringify(done)); }
+  } catch (e) {}
 }
 
 // ── OPRI Survey (Core & Full) ─────────────────────────────────────────────────
@@ -719,6 +729,7 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
     setSaving(true);
     const id = "R_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
     await saveResponse({ id: id, timestamp: new Date().toISOString(), survey: level, meta: meta, answers: answers, engagement_code: engagementCode || "" });
+    markSurveyDone(level); // track locally so UI shows "Completado"
     setSaving(false);
     setDone(true);
     onDone();
@@ -781,6 +792,7 @@ function DeepSurvey({ mod, onDone, onBack, engagementCode, inheritedMeta }) {
     setSaving(true);
     const id = "R_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
     await saveResponse({ id: id, timestamp: new Date().toISOString(), survey: "deep_" + mod.id, meta: meta, answers: answers, engagement_code: engagementCode || "" });
+    markSurveyDone("deep_" + mod.id); // track locally so UI shows "Completado"
     setSaving(false);
     setDone(true);
     onDone();
@@ -874,22 +886,25 @@ function CascadeSelector({ coreScores, fullScores, deepCounts, onSelect }) {
 
 function SurveyCard({ level, badge, label, desc, color, status, triggers, lockMsg, onClick }) {
   const locked = status === "locked" || status === "not_required";
+  const done = status === "done";
+  const borderColor = done ? GREEN_LT + "88" : (locked ? CREAM_DK : status === "activated" ? color + "55" : CREAM_DK);
+  const bgColor = done ? "#F0FDF4" : (locked ? "#F9F9F7" : WHITE);
   return (
-    <div style={{ marginBottom: 7, borderRadius: 10, border: "1px solid " + (locked ? CREAM_DK : status === "activated" ? color + "55" : CREAM_DK), background: locked ? "#F9F9F7" : WHITE, overflow: "hidden", opacity: locked ? 0.65 : 1 }}>
-      <button onClick={locked ? undefined : onClick} disabled={locked} style={{ display: "flex", alignItems: "center", gap: 11, width: "100%", padding: "12px 14px", background: "transparent", border: "none", cursor: locked ? "default" : "pointer", textAlign: "left", fontFamily: "inherit" }}>
-        <div style={{ width: 32, height: 32, borderRadius: 7, background: color + (locked ? "0D" : "18"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          {locked ? <span style={{ fontSize: 13 }}>🔒</span> : <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />}
+    <div style={{ marginBottom: 7, borderRadius: 10, border: "1px solid " + borderColor, background: bgColor, overflow: "hidden", opacity: locked ? 0.65 : 1 }}>
+      <button onClick={(locked || done) ? undefined : onClick} disabled={locked || done} style={{ display: "flex", alignItems: "center", gap: 11, width: "100%", padding: "12px 14px", background: "transparent", border: "none", cursor: (locked || done) ? "default" : "pointer", textAlign: "left", fontFamily: "inherit" }}>
+        <div style={{ width: 32, height: 32, borderRadius: 7, background: done ? GREEN_LT + "22" : color + (locked ? "0D" : "18"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          {done ? <span style={{ fontSize: 15 }}>✓</span> : locked ? <span style={{ fontSize: 13 }}>🔒</span> : <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />}
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: locked ? MUTED : CHARCOAL, marginBottom: 1 }}>{label}</div>
-          <div style={{ fontSize: 11, color: MUTED }}>{desc}</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: done ? GREEN : (locked ? MUTED : CHARCOAL), marginBottom: 1 }}>{label}</div>
+          <div style={{ fontSize: 11, color: done ? GREEN_LT : MUTED }}>{done ? "Respondido — gracias por su participación" : desc}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
-          <span style={{ fontSize: 9, fontWeight: 700, color: status === "activated" ? color : MUTED, background: (status === "activated" ? color : MUTED) + "18", padding: "2px 6px", borderRadius: 99, textTransform: "uppercase" }}>{level}</span>
-          {badge && <span style={{ fontSize: 9, color: MUTED_LT }}>{badge}</span>}
+          <span style={{ fontSize: 9, fontWeight: 700, color: done ? GREEN : (status === "activated" ? color : MUTED), background: (done ? GREEN : (status === "activated" ? color : MUTED)) + "18", padding: "2px 6px", borderRadius: 99, textTransform: "uppercase" }}>{level}</span>
+          {badge && <span style={{ fontSize: 9, color: done ? GREEN_LT : MUTED_LT, fontWeight: done ? 700 : 400 }}>{badge}</span>}
         </div>
       </button>
-      {status === "activated" && triggers && triggers.length > 0 && (
+      {!done && status === "activated" && triggers && triggers.length > 0 && (
         <div style={{ padding: "0 14px 10px", display: "flex", flexWrap: "wrap", gap: 4 }}>
           {triggers.map(function(t, i) { return <span key={i} style={{ fontSize: 10, color: color, background: color + "14", padding: "2px 7px", borderRadius: 99, fontWeight: 600 }}>{t}</span>; })}
         </div>
@@ -1594,6 +1609,7 @@ function EngagementSurveyPage({ code }) {
   const [activeSurvey, setActiveSurvey] = useState(null);
   const [responses, setResponses] = useState([]);
   const [savedMeta, setSavedMeta] = useState(null); // persists meta across levels
+  const [completedSurveys, setCompletedSurveys] = useState(loadCompletedSurveys()); // tracks what THIS respondent finished
 
   useEffect(function() {
     async function init() {
@@ -1611,6 +1627,7 @@ function EngagementSurveyPage({ code }) {
   async function handleDone() {
     const data = await loadResponses(code);
     setResponses(data);
+    setCompletedSurveys(loadCompletedSurveys()); // refresh completion state
     setActiveSurvey(null);
   }
 
@@ -1649,13 +1666,43 @@ function EngagementSurveyPage({ code }) {
 
   function renderSurvey() {
     if (!activeSurvey) {
+      const coreDone = completedSurveys.indexOf("core") >= 0;
+      const fullDone = completedSurveys.indexOf("full") >= 0;
+
+      // Determine if the respondent has completed everything required
+      const coreOnly = coreDone && !l2.active;
+      const fullRequired = l2.active;
+      const deepRequired = fullDone && activeMods.length > 0;
+      const allDeepDone = deepRequired && activeMods.every(function(m) { return completedSurveys.indexOf("deep_" + m.id) >= 0; });
+      const everythingDone = coreOnly || (fullRequired && fullDone && (!deepRequired || allDeepDone));
+
+      if (everythingDone) {
+        return (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", padding: "32px 24px", textAlign: "center" }}>
+            <div style={{ width: 64, height: 64, borderRadius: "50%", background: GREEN + "18", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+              <span style={{ fontSize: 30, color: GREEN }}>✓</span>
+            </div>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, color: GREEN, fontWeight: 600, marginBottom: 10 }}>¡Muchas gracias!</div>
+            <div style={{ fontSize: 14, color: MUTED, maxWidth: 320, lineHeight: 1.7, marginBottom: 6 }}>
+              {"Su participación en el diagnóstico OPRI™ de " + engagement.company + " ha sido registrada."}
+            </div>
+            <div style={{ fontSize: 13, color: MUTED_LT, maxWidth: 300, lineHeight: 1.6 }}>
+              El equipo de Promundial procesará los resultados y los compartirá con su organización.
+            </div>
+            <div style={{ marginTop: 24, padding: "10px 18px", background: GOLD_PALE, borderRadius: 8, border: "1px solid " + GOLD + "44" }}>
+              <span style={{ fontSize: 11, color: CHARCOAL, letterSpacing: "0.05em" }}>OPRI™ ENTERPRISE EDITION · PROMUNDIAL CONSULTING GROUP</span>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div style={{ padding: "22px 18px", maxWidth: 540, margin: "0 auto" }}>
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 4 }}>{engagement.company}</div>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 20 }}>OPRI™ Core Survey · Complete su diagnóstico</div>
-          <SurveyCard level="Level 1" badge={coreRR.length > 0 ? coreRR.length + " resp." : "Iniciar"} label="OPRI Core 25" desc="Diagnóstico rápido · 25 preguntas · ~8 min" color={GREEN} status="available" onClick={function() { setActiveSurvey({ id: "core" }); }} />
+          <SurveyCard level="Level 1" badge={coreDone ? "✓ Completado" : (coreRR.length > 0 ? coreRR.length + " resp." : "Iniciar")} label="OPRI Core 25" desc="Diagnóstico rápido · 25 preguntas · ~8 min" color={GREEN} status={coreDone ? "done" : "available"} onClick={coreDone ? undefined : function() { setActiveSurvey({ id: "core" }); }} />
           {coreRR.length > 0 && l2.active && (
-            <SurveyCard level="Level 2" badge={fullRR.length > 0 ? fullRR.length + " resp." : "Activado"} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status="activated" triggers={l2.reasons.slice(0, 2)} onClick={function() { setActiveSurvey({ id: "full" }); }} />
+            <SurveyCard level="Level 2" badge={fullDone ? "✓ Completado" : (fullRR.length > 0 ? fullRR.length + " resp." : "Activado")} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status={fullDone ? "done" : "activated"} triggers={fullDone ? [] : l2.reasons.slice(0, 2)} onClick={fullDone ? undefined : function() { setActiveSurvey({ id: "full" }); }} />
           )}
           {coreRR.length > 0 && !l2.active && (
             <div style={{ padding: "13px 14px", background: "#DCFCE7", borderRadius: 9, border: "1px solid " + GREEN_LT + "55", marginTop: 8 }}>
@@ -1669,10 +1716,11 @@ function EngagementSurveyPage({ code }) {
                 {"Level 3 — Deep Dive" + (l3.fdd ? " · Full Deep Dive activado" : "")}
               </div>
               {activeMods.map(function(m) {
+                const deepDone = completedSurveys.indexOf("deep_" + m.id) >= 0;
                 const qCount = m.groups.reduce(function(sum, g) { return sum + g.qs.length; }, 0);
                 const trigger = l3.reasons.find(function(r) { return r.indexOf(m.code) >= 0 || r.indexOf("Full Deep Dive") >= 0; });
                 return (
-                  <SurveyCard key={m.id} level={m.index} badge={deepCounts[m.id] > 0 ? deepCounts[m.id] + " resp." : "Activado"} label={m.fullName} desc={qCount + " preguntas"} color={m.color} status="activated" triggers={trigger ? [trigger] : []} onClick={function() { setActiveSurvey({ id: "deep_" + m.id, mod: m }); }} />
+                  <SurveyCard key={m.id} level={m.index} badge={deepDone ? "✓ Completado" : (deepCounts[m.id] > 0 ? deepCounts[m.id] + " resp." : "Activado")} label={m.fullName} desc={qCount + " preguntas"} color={m.color} status={deepDone ? "done" : "activated"} triggers={deepDone ? [] : (trigger ? [trigger] : [])} onClick={deepDone ? undefined : function() { setActiveSurvey({ id: "deep_" + m.id, mod: m }); }} />
                 );
               })}
             </div>
