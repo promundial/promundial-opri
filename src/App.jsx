@@ -1567,11 +1567,25 @@ function AdminPanel({ password, onExit }) {
 function EngCard({ eng, onClose, onReopen, onResults, closed, password, onReload }) {
   const surveyUrl = window.location.origin + "/e/" + eng.code;
   const [copied, setCopied] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
+
   function copyLink() {
     navigator.clipboard.writeText(surveyUrl);
     setCopied(true);
     setTimeout(function() { setCopied(false); }, 2000);
   }
+
+  async function handleGenerateReport() {
+    setGeneratingReport(true);
+    try {
+      const allResponses = await loadResponses(eng.code);
+      await generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_MODULES, computeOPRI, computeDeep, checkL2, checkL3);
+    } catch(e) {
+      alert("Error generando reporte: " + e.message);
+    }
+    setGeneratingReport(false);
+  }
+
   const isExpired = eng.close_date && new Date(eng.close_date) < new Date();
   return (
     <div style={{ background: WHITE, borderRadius: 10, padding: "14px 16px", border: "1px solid " + CREAM_DK, marginBottom: 8 }}>
@@ -1592,8 +1606,9 @@ function EngCard({ eng, onClose, onReopen, onResults, closed, password, onReload
           )}
           {eng.close_date && <div style={{ fontSize: 11, color: MUTED_LT, marginTop: 3 }}>Cierre: {new Date(eng.close_date).toLocaleDateString("es-ES")}</div>}
         </div>
-        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <button onClick={function() { onResults(eng); }} style={Object.assign({}, btn(BLUE, false), { fontSize: 11, padding: "7px 14px" })}>Ver resultados</button>
+          <button onClick={handleGenerateReport} disabled={generatingReport} style={Object.assign({}, btn(GOLD, generatingReport), { fontSize: 11, padding: "7px 14px", color: generatingReport ? MUTED_LT : CHARCOAL })}>{generatingReport ? "Generando…" : "📄 Reporte PDF"}</button>
           {!closed && <button onClick={function() { onClose(eng); }} style={Object.assign({}, btn(RED, false), { fontSize: 11, padding: "7px 14px" })}>Cerrar</button>}
           {closed && onReopen && <button onClick={function() { onReopen(eng); }} style={Object.assign({}, btn(MUTED, false), { fontSize: 11, padding: "7px 14px" })}>Reabrir</button>}
         </div>
@@ -1793,6 +1808,554 @@ function generateDemoData() {
   }
   return data;
 }
+
+// ── OPRI™ Report Generator ────────────────────────────────────────────────────
+// Called from EngCard: generateReport(eng, responses, scores)
+// Opens a new window with the full HTML report + print button
+
+const GREEN = "#1B4332";
+const GREEN_MID = "#2D6A4F";
+const GREEN_LT = "#40916C";
+const GOLD = "#C9A84C";
+const GOLD_PALE = "#F5EDD0";
+const CREAM = "#F8F4EC";
+const CHARCOAL = "#1A1A1A";
+const MUTED = "#6B7280";
+const RED = "#B91C1C";
+const AMBER = "#D97706";
+const ORANGE = "#EA580C";
+const BLUE = "#1D4ED8";
+const VIOLET = "#7C3AED";
+const INDIGO = "#4338CA";
+const TEAL = "#0F766E";
+const WHITE = "#FFFFFF";
+
+const MATURITY_ES = [
+  { min: 0,   max: 2.5,  es: "Crítico",       en: "Critical",       color: RED },
+  { min: 2.5, max: 3.2,  es: "Vulnerable",    en: "Vulnerable",     color: ORANGE },
+  { min: 3.2, max: 3.8,  es: "Estable",       en: "Stable",         color: AMBER },
+  { min: 3.8, max: 4.3,  es: "Alto Desempeño",en: "High Performance",color: GREEN_LT },
+  { min: 4.3, max: 5.01, es: "World Class",   en: "World Class",    color: GREEN },
+];
+function getM(s) { return MATURITY_ES.find(function(m) { return s >= m.min && s < m.max; }) || MATURITY_ES[MATURITY_ES.length-1]; }
+
+const PAI_BANDS = [
+  { min: 0,   max: 0.3,  es: "Alta alineación",      en: "High Alignment",       color: GREEN },
+  { min: 0.3, max: 0.7,  es: "Moderado",             en: "Moderate",             color: AMBER },
+  { min: 0.7, max: 1.2,  es: "Riesgo",               en: "Risk",                 color: ORANGE },
+  { min: 1.2, max: 99,   es: "Desconexión crítica",  en: "Critical Disconnection",color: RED },
+];
+function getPAI(g) { return PAI_BANDS.find(function(b) { return g >= b.min && g < b.max; }) || PAI_BANDS[PAI_BANDS.length-1]; }
+
+const DIM_META = {
+  alignment:  { es: "Alineación Estratégica",          en: "Strategic Alignment",             color: BLUE,   icon: "◈" },
+  execution:  { es: "Excelencia de Ejecución",         en: "Execution Excellence",            color: GREEN,  icon: "◆" },
+  leadership: { es: "Liderazgo & Efectividad Colectiva",en: "Leadership & Collective Effectiveness", color: VIOLET, icon: "◉" },
+  resilience: { es: "Cambio & Resiliencia",            en: "Change & Resilience",             color: AMBER,  icon: "◐" },
+  culture:    { es: "Salud Organizacional & Cultura",  en: "Organizational Health & Culture", color: TEAL,   icon: "◑" },
+};
+
+// ── Gauge SVG ─────────────────────────────────────────────────────────────────
+function gaugeHTML(score, color, size) {
+  size = size || 120;
+  const r = size * 0.38;
+  const cx = size / 2;
+  const cy = size * 0.58;
+  const pct = Math.min(score / 5, 1);
+  const startAngle = Math.PI;
+  const endAngle = startAngle + pct * Math.PI;
+  const x1 = cx + r * Math.cos(startAngle);
+  const y1 = cy + r * Math.sin(startAngle);
+  const x2 = cx + r * Math.cos(endAngle);
+  const y2 = cy + r * Math.sin(endAngle);
+  const largeArc = pct > 0.5 ? 1 : 0;
+  return '<svg width="' + size + '" height="' + (size*0.65) + '" viewBox="0 0 ' + size + ' ' + (size*0.65) + '">' +
+    '<path d="M ' + (cx - r) + ' ' + cy + ' A ' + r + ' ' + r + ' 0 0 1 ' + (cx + r) + ' ' + cy + '" fill="none" stroke="#E5E7EB" stroke-width="' + (size*0.09) + '" stroke-linecap="round"/>' +
+    (score > 0 ? '<path d="M ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + largeArc + ' 1 ' + x2 + ' ' + y2 + '" fill="none" stroke="' + color + '" stroke-width="' + (size*0.09) + '" stroke-linecap="round"/>' : '') +
+    '<text x="' + cx + '" y="' + (cy - size*0.02) + '" text-anchor="middle" font-size="' + (size*0.22) + '" font-weight="700" fill="' + color + '" font-family="Georgia,serif">' + score.toFixed(2) + '</text>' +
+    '<text x="' + cx + '" y="' + (cy + size*0.12) + '" text-anchor="middle" font-size="' + (size*0.09) + '" fill="' + MUTED + '" font-family="sans-serif">/ 5.00</text>' +
+    '</svg>';
+}
+
+// ── Bar chart ─────────────────────────────────────────────────────────────────
+function barHTML(dims, scores) {
+  var bars = dims.map(function(d) {
+    var sc = scores.dimScores[d.id];
+    var m = sc != null ? getM(sc) : null;
+    var meta = DIM_META[d.id];
+    var pct = sc != null ? (sc / 5 * 100).toFixed(1) : 0;
+    return '<div style="margin-bottom:10px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">' +
+        '<span style="font-size:11px;color:' + CHARCOAL + ';font-weight:600">' + meta.es + ' <span style="color:#999;font-weight:400;font-size:10px">/ ' + meta.en + '</span></span>' +
+        '<span style="font-size:13px;font-weight:700;color:' + (m ? m.color : MUTED) + '">' + (sc != null ? sc.toFixed(2) : '—') + '</span>' +
+      '</div>' +
+      '<div style="background:#E5E7EB;border-radius:99px;height:8px;overflow:hidden">' +
+        '<div style="width:' + pct + '%;height:100%;background:' + (m ? m.color : '#ccc') + ';border-radius:99px;transition:width 0.4s"></div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  return bars;
+}
+
+// ── PAI table ─────────────────────────────────────────────────────────────────
+function paiTableHTML(dims, scores) {
+  var rows = dims.map(function(d) {
+    var p = scores.paiByDim[d.id];
+    var meta = DIM_META[d.id];
+    var band = p && p.gap != null ? getPAI(p.gap) : null;
+    return '<tr style="border-bottom:1px solid #F3F4F6">' +
+      '<td style="padding:8px 10px;font-size:12px;color:' + CHARCOAL + ';font-weight:600">' + meta.es + '</td>' +
+      '<td style="padding:8px 10px;text-align:center;font-size:12px;color:' + meta.color + ';font-weight:700">' + (p && p.ls != null ? p.ls.toFixed(2) : '—') + '</td>' +
+      '<td style="padding:8px 10px;text-align:center;font-size:12px;color:' + MUTED + '">' + (p && p.os != null ? p.os.toFixed(2) : '—') + '</td>' +
+      '<td style="padding:8px 10px;text-align:center;font-size:13px;font-weight:700;color:' + (band ? band.color : MUTED) + '">' + (p && p.gap != null ? p.gap.toFixed(2) : '—') + '</td>' +
+      '<td style="padding:8px 10px;text-align:center"><span style="font-size:9px;font-weight:700;background:' + (band ? band.color : MUTED) + '22;color:' + (band ? band.color : MUTED) + ';padding:2px 8px;border-radius:99px">' + (band ? band.es : '—') + '</span></td>' +
+    '</tr>';
+  }).join('');
+  return '<table style="width:100%;border-collapse:collapse">' +
+    '<thead><tr style="background:#F9F9F7">' +
+      '<th style="padding:8px 10px;text-align:left;font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em">Dimensión</th>' +
+      '<th style="padding:8px 10px;text-align:center;font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em">Liderazgo</th>' +
+      '<th style="padding:8px 10px;text-align:center;font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em">Organización</th>' +
+      '<th style="padding:8px 10px;text-align:center;font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em">GAP</th>' +
+      '<th style="padding:8px 10px;text-align:center;font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em">Estado</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+// ── Recommendation logic ──────────────────────────────────────────────────────
+function getRecommendations(dimId, score) {
+  var isCritical = score < 2.5;
+  var isVulnerable = score >= 2.5 && score < 3.2;
+  var isStable = score >= 3.2 && score < 3.8;
+
+  var recs = {
+    alignment: {
+      lss: isCritical ? [
+        "Implementar VSM (Value Stream Mapping) del proceso de cascada estratégica",
+        "Taller de Hoshin Kanri / X-Matrix para alineación de objetivos",
+        "Definir KPIs ligados a prioridades estratégicas con metodología OKR",
+      ] : isVulnerable ? [
+        "Mapeo de iniciativas actuales vs. prioridades estratégicas (matriz Urgente/Importante)",
+        "Implementar rutinas de seguimiento estratégico mensual (S&OP adaptado)",
+      ] : [
+        "Optimizar el proceso de comunicación estratégica hacia niveles operativos",
+        "Dashboard de seguimiento estratégico en tiempo real",
+      ],
+      belbin: isCritical ? [
+        "Talleres Belbin para identificar quién puede ser Coordinador/Cerebro en el equipo directivo",
+        "Análisis de roles faltantes en el equipo de planificación estratégica",
+        "Workshop: 'Arquitectura de equipo para la ejecución estratégica'",
+      ] : isVulnerable ? [
+        "Identificar perfiles Coordinador e Investigador de Recursos para liderar la comunicación estratégica",
+        "Sesión de feedback Belbin con el equipo de dirección",
+      ] : [
+        "Aprovechar perfiles Especialista para profundizar en análisis estratégico",
+        "Reforzar el rol de Monitor Evaluador en revisiones de estrategia",
+      ],
+      leadership: isCritical ? [
+        "Programa de alineación de liderazgo: 'Leading with Strategy'",
+        "Coaching ejecutivo para Comité Directivo en comunicación de visión",
+        "Taller: 'Del propósito a la acción: cómo los líderes crean alineación'",
+      ] : isVulnerable ? [
+        "Sesiones de calibración de mensajes entre niveles de liderazgo",
+        "Programa de storytelling estratégico para líderes de área",
+      ] : [
+        "Desarrollo de líderes como embajadores de la estrategia",
+        "Programa de mentoring cruzado entre áreas para reforzar alineación",
+      ],
+    },
+    execution: {
+      lss: isCritical ? [
+        "Implementación de Lean Daily Management (LDM) con tableros visuales",
+        "Programa Green Belt en áreas críticas de ejecución",
+        "Mapa de flujo de valor (VSM) de los 3 procesos más críticos",
+        "Sistema de gestión de problemas: Daily Standup + Escalamiento estructurado",
+      ] : isVulnerable ? [
+        "Implementar PDCA como ciclo estándar de mejora en cada área",
+        "Definir estándares de proceso para las 5 rutinas operativas clave",
+        "Dashboard operativo con semáforos de desempeño por área",
+      ] : [
+        "Evolucionar de Lean hacia Six Sigma: reducción de variabilidad en procesos clave",
+        "Implementar sistema de sugerencias (Kaizen) para mejora continua desde la base",
+      ],
+      belbin: isCritical ? [
+        "Identificar perfiles Implementador y Finalizador — roles críticos en ejecución",
+        "Rediseñar equipos de proyecto asignando responsabilidades según roles Belbin",
+        "Taller: 'De la intención a la acción: cómo los equipos ejecutan'",
+      ] : isVulnerable ? [
+        "Fortalecer perfiles Cohesionador para mejorar seguimiento y disciplina operativa",
+        "Análisis de brechas de roles en los equipos de mayor responsabilidad",
+      ] : [
+        "Optimizar la composición de equipos de mejora continua",
+        "Programa de desarrollo de Finalizadores internos",
+      ],
+      leadership: isCritical ? [
+        "Programa 'Accountability Leadership': cultura de responsabilidad y seguimiento",
+        "Implementar reuniones de gestión de desempeño estructuradas (L10 o equivalente)",
+        "Coaching en disciplina operativa para gerentes de primera línea",
+      ] : isVulnerable ? [
+        "Taller de liderazgo situacional aplicado a equipos de ejecución",
+        "Desarrollo de rituales de seguimiento en cada nivel jerárquico",
+      ] : [
+        "Evolucionar hacia liderazgo de alto rendimiento: delegación y autonomía",
+        "Programa de desarrollo de líderes de mejora continua",
+      ],
+    },
+    leadership: {
+      lss: isCritical ? [
+        "Diagnóstico de capacidad de gestión: análisis de rutinas directivas",
+        "Implementar War Room / Sala de Situación para visibilidad de resultados",
+        "Definir estándares de reuniones de liderazgo (agenda, frecuencia, outputs)",
+      ] : isVulnerable ? [
+        "Estandarizar el proceso de toma de decisiones con datos (A3 Thinking)",
+        "Implementar revisiones de desempeño estructuradas mensuales",
+      ] : [
+        "Evolucionar hacia gestión predictiva: de KPIs reactivos a leading indicators",
+        "Sistema de gestión visual integrado entre niveles directivos",
+      ],
+      belbin: isCritical ? [
+        "Diagnóstico Belbin completo del Comité Directivo",
+        "Taller intensivo: 'Construcción de equipos directivos de alto rendimiento'",
+        "Identificación de roles ausentes: especialmente Coordinador, Cohesionador y Finalizador",
+        "Plan de intervención por perfil: fortalezas y zonas de desarrollo",
+      ] : isVulnerable ? [
+        "Sesión de retroalimentación Belbin entre pares directivos",
+        "Taller: 'Cómo los roles de equipo impactan la efectividad del liderazgo colectivo'",
+        "Coaching individual basado en perfil Belbin para C-Suite",
+      ] : [
+        "Programa avanzado de liderazgo colectivo basado en complementariedad de roles",
+        "Facilitar conversaciones de confianza usando perfiles Belbin como lenguaje común",
+      ],
+      leadership: isCritical ? [
+        "Programa de desarrollo de confianza directiva: 'Building Trust at the Top'",
+        "Intervención en dinámicas de equipo: facilitación de conversaciones difíciles",
+        "Coaching sistémico para el equipo directivo completo",
+        "Taller: 'Liderazgo vulnerable: el poder de la apertura en el C-Suite'",
+      ] : isVulnerable ? [
+        "Programa de comunicación no violenta para líderes",
+        "Sesiones de co-creación de acuerdos de trabajo en el equipo directivo",
+        "Taller de inteligencia emocional aplicada al liderazgo colectivo",
+      ] : [
+        "Evolucionar hacia liderazgo distribuido y co-liderazgo",
+        "Programa de desarrollo de líderes de líderes",
+      ],
+    },
+    resilience: {
+      lss: isCritical ? [
+        "Implementar FMEA (Análisis de Modo y Efecto de Fallo) en procesos críticos",
+        "Plan de continuidad operativa basado en análisis de riesgos",
+        "Taller de gestión del cambio con metodología ADKAR",
+      ] : isVulnerable ? [
+        "Implementar ciclos de retrospectiva mensual (Lessons Learned estructurado)",
+        "Desarrollar capacidad de prototipado rápido (MVP interno para iniciativas)",
+      ] : [
+        "Desarrollar una cultura de experimentación con pilotos controlados",
+        "Implementar sistema de gestión de ideas e innovación incremental",
+      ],
+      belbin: isCritical ? [
+        "Identificar perfiles Cerebro e Investigador de Recursos — clave para adaptabilidad",
+        "Taller: 'Equipos resilientes: diversidad de roles ante la incertidumbre'",
+      ] : isVulnerable ? [
+        "Potenciar el perfil Investigador de Recursos para detectar tendencias",
+        "Desarrollar la capacidad de Monitor Evaluador para analizar opciones ante el cambio",
+      ] : [
+        "Aprovechar perfiles Cerebro para impulsar innovación organizacional",
+        "Crear equipos de innovación con diversidad de roles Belbin",
+      ],
+      leadership: isCritical ? [
+        "Programa de liderazgo en tiempos de cambio: 'Leading Through Uncertainty'",
+        "Taller de gestión del cambio para líderes: modelos Kotter y Prosci",
+        "Desarrollo de comunicación de cambio: cómo los líderes reducen la resistencia",
+      ] : isVulnerable ? [
+        "Taller de liderazgo adaptativo: distinguir trabajo técnico de trabajo adaptativo",
+        "Desarrollar la capacidad de aprendizaje organizacional desde el liderazgo",
+      ] : [
+        "Evolucionar hacia liderazgo de innovación: crear condiciones para experimentar",
+        "Programa de desarrollo de cultura de aprendizaje continuo",
+      ],
+    },
+    culture: {
+      lss: isCritical ? [
+        "Diagnóstico de clima organizacional + plan de acción estructurado",
+        "Implementar programa de reconocimiento ligado a comportamientos clave",
+        "Taller de mejora del ambiente de trabajo (5S aplicado a cultura)",
+      ] : isVulnerable ? [
+        "Diseñar sistema de reconocimiento peer-to-peer",
+        "Implementar canales formales de comunicación interna bidireccional",
+      ] : [
+        "Programa de embajadores culturales en cada área",
+        "Medición periódica de cultura con pulso trimestral",
+      ],
+      belbin: isCritical ? [
+        "Taller Belbin para toda la organización: crear lenguaje común de roles y contribuciones",
+        "Usar Belbin como herramienta de reconocimiento: visibilizar las fortalezas de cada persona",
+        "Programa de integración de equipos basado en complementariedad de roles",
+      ] : isVulnerable ? [
+        "Sesiones de team building basadas en perfiles Belbin",
+        "Comunicar el valor de cada rol para reforzar la cultura de contribución",
+      ] : [
+        "Usar Belbin para optimizar la colaboración entre áreas",
+        "Desarrollar una cultura de roles complementarios como ventaja competitiva",
+      ],
+      leadership: isCritical ? [
+        "Programa de liderazgo cultural: 'Culture Starts at the Top'",
+        "Taller de seguridad psicológica para líderes (basado en trabajo de Amy Edmondson)",
+        "Intervención en dinámicas tóxicas: facilitación externa de conversaciones difíciles",
+      ] : isVulnerable ? [
+        "Programa de liderazgo empático y presencia ejecutiva",
+        "Taller: 'Cómo los líderes construyen culturas de alto desempeño'",
+      ] : [
+        "Evolucionar hacia cultura de alto rendimiento y bienestar",
+        "Programa de desarrollo de líderes como arquitectos culturales",
+      ],
+    },
+  };
+  return recs[dimId] || { lss: [], belbin: [], leadership: [] };
+}
+
+// ── Main report generator ─────────────────────────────────────────────────────
+async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_MODULES, computeOPRI, computeDeep, checkL2, checkL3) {
+  var coreRR = allResponses.filter(function(r) { return r.survey === "core"; });
+  var fullRR = allResponses.filter(function(r) { return r.survey === "full"; });
+  var coreScores = computeOPRI(coreRR, CORE_DIMS);
+  var fullScores = computeOPRI(fullRR, FULL_DIMS);
+  var l2 = checkL2(coreScores);
+  var l3 = checkL3(fullScores);
+  var activeMods = DEEP_MODULES.filter(function(m) { return l3.mods.indexOf(m.id) >= 0; });
+  var mainScores = fullScores || coreScores;
+  var mainDims = fullScores ? FULL_DIMS : CORE_DIMS;
+
+  if (!mainScores) {
+    alert("No hay respuestas suficientes para generar el reporte.");
+    return;
+  }
+
+  // ── Identify weakest dims for recommendations ──
+  var dimsSorted = mainDims.map(function(d) {
+    return { dim: d, score: mainScores.dimScores[d.id] };
+  }).filter(function(x) { return x.score != null; }).sort(function(a, b) { return a.score - b.score; });
+
+  // ── Call Claude API for AI interpretations ──
+  var win = window.open("", "_blank");
+  win.document.write('<html><body style="font-family:sans-serif;padding:40px;text-align:center;color:#6B7280"><h2 style="color:#1B4332">Generando reporte OPRI™...</h2><p>Consultando inteligencia artificial · Por favor espere</p><div style="font-size:32px;margin-top:20px">⏳</div></body></html>');
+
+  var aiInterpretations = {};
+  try {
+    var dimContext = mainDims.map(function(d) {
+      var sc = mainScores.dimScores[d.id];
+      var meta = DIM_META[d.id];
+      return meta.en + " (" + meta.es + "): " + (sc != null ? sc.toFixed(2) : "N/A") + "/5.00";
+    }).join(", ");
+
+    var prompt = "You are an expert organizational consultant from Promundial Consulting Group specializing in Operational Excellence, Lean Six Sigma, Belbin Team Roles, and Leadership Development.\n\n" +
+      "Company: " + eng.company + "\n" +
+      "OPRI™ Score: " + mainScores.opri.toFixed(2) + "/5.00 (" + getM(mainScores.opri).en + ")\n" +
+      "Respondents: " + mainScores.n + "\n" +
+      "Dimension scores: " + dimContext + "\n" +
+      (mainScores.paiGlobal != null ? "PAI™ (Perception Alignment Index): " + mainScores.paiGlobal.toFixed(2) + " (" + getPAI(mainScores.paiGlobal).en + ")\n" : "") +
+      "\nGenerate a bilingual (Spanish/English) executive interpretation for each dimension. For each, write:\n" +
+      "- 2-3 sentences in Spanish describing the organizational reality implied by the score\n" +
+      "- 2-3 sentences in English describing the same\n" +
+      "Also write a 3-sentence executive summary in Spanish and English about the overall organizational health.\n\n" +
+      "Respond ONLY with valid JSON in this exact format:\n" +
+      '{"summary_es":"...","summary_en":"...","dims":{"alignment":{"es":"...","en":"..."},"execution":{"es":"...","en":"..."},"leadership":{"es":"...","en":"..."},"resilience":{"es":"...","en":"..."},"culture":{"es":"...","en":"..."}}}';
+
+    var resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    var data = await resp.json();
+    var text = data.content && data.content[0] ? data.content[0].text : "";
+    text = text.replace(/```json|```/g, "").trim();
+    aiInterpretations = JSON.parse(text);
+  } catch(e) {
+    aiInterpretations = {
+      summary_es: "El análisis OPRI™ revela áreas críticas de atención que requieren intervención inmediata por parte del equipo directivo.",
+      summary_en: "The OPRI™ analysis reveals critical areas requiring immediate attention from the leadership team.",
+      dims: {}
+    };
+  }
+
+  // ── Build HTML report ──────────────────────────────────────────────────────
+  var date = new Date().toLocaleDateString("es-ES", { year: "numeric", month: "long", day: "numeric" });
+  var maturity = getM(mainScores.opri);
+
+  var dimSections = mainDims.map(function(d) {
+    var sc = mainScores.dimScores[d.id];
+    var meta = DIM_META[d.id];
+    var m = sc != null ? getM(sc) : null;
+    var aiDim = aiInterpretations.dims && aiInterpretations.dims[d.id] ? aiInterpretations.dims[d.id] : { es: "", en: "" };
+    var recs = getRecommendations(d.id, sc || 0);
+    return '<div style="page-break-inside:avoid;margin-bottom:32px;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden">' +
+      '<div style="background:' + meta.color + '18;border-left:4px solid ' + meta.color + ';padding:14px 18px;display:flex;align-items:center;gap:12px">' +
+        '<span style="font-size:20px">' + meta.icon + '</span>' +
+        '<div style="flex:1">' +
+          '<div style="font-size:14px;font-weight:700;color:' + CHARCOAL + '">' + meta.es + '</div>' +
+          '<div style="font-size:11px;color:' + MUTED + '">' + meta.en + '</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-size:22px;font-weight:700;color:' + (m ? m.color : MUTED) + ';font-family:Georgia,serif">' + (sc != null ? sc.toFixed(2) : '—') + '</div>' +
+          '<span style="font-size:9px;font-weight:700;background:' + (m ? m.color : MUTED) + ';color:white;padding:2px 8px;border-radius:99px">' + (m ? m.es : '—') + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:16px 18px">' +
+        (aiDim.es ? '<p style="font-size:12px;color:' + CHARCOAL + ';line-height:1.7;margin:0 0 6px 0"><strong>ES:</strong> ' + aiDim.es + '</p>' : '') +
+        (aiDim.en ? '<p style="font-size:12px;color:' + MUTED + ';line-height:1.7;margin:0 0 14px 0"><strong>EN:</strong> ' + aiDim.en + '</p>' : '') +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px">' +
+          recBlock("🔧 Lean Six Sigma / Operational Excellence", recs.lss, "#EFF6FF", BLUE) +
+          recBlock("👥 Belbin Team Roles", recs.belbin, "#F5F3FF", VIOLET) +
+          recBlock("🎯 Leadership Excellence", recs.leadership, "#F0FDF4", GREEN) +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  function recBlock(title, items, bg, color) {
+    return '<div style="background:' + bg + ';border-radius:8px;padding:12px">' +
+      '<div style="font-size:10px;font-weight:700;color:' + color + ';margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">' + title + '</div>' +
+      '<ul style="margin:0;padding-left:14px">' +
+        items.map(function(i) { return '<li style="font-size:11px;color:' + CHARCOAL + ';line-height:1.6;margin-bottom:4px">' + i + '</li>'; }).join('') +
+      '</ul>' +
+    '</div>';
+  }
+
+  // Deep Dive sections
+  var deepSections = activeMods.map(function(m) {
+    var deepRR = allResponses.filter(function(r) { return r.survey === "deep_" + m.id; });
+    var deepSc = computeDeep(deepRR, m);
+    if (!deepSc) return '';
+    var groupBars = m.groups.map(function(g) {
+      var sc = deepSc.groupScores[g.label];
+      var mat = sc != null ? getM(sc) : null;
+      var pct = sc != null ? (sc / 5 * 100).toFixed(1) : 0;
+      return '<div style="margin-bottom:8px">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:2px">' +
+          '<span style="font-size:11px;color:' + CHARCOAL + '">' + g.label + '</span>' +
+          '<span style="font-size:11px;font-weight:700;color:' + (mat ? mat.color : MUTED) + '">' + (sc != null ? sc.toFixed(2) : '—') + '</span>' +
+        '</div>' +
+        '<div style="background:#E5E7EB;border-radius:99px;height:6px"><div style="width:' + pct + '%;height:100%;background:' + m.color + ';border-radius:99px"></div></div>' +
+      '</div>';
+    }).join('');
+    return '<div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden">' +
+      '<div style="background:' + m.color + ';padding:14px 18px;display:flex;align-items:center;justify-content:space-between">' +
+        '<div>' +
+          '<div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600">' + m.index + '</div>' +
+          '<div style="font-size:16px;font-weight:700;color:white">' + m.fullName + '</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-size:28px;font-weight:700;color:white;font-family:Georgia,serif">' + (deepSc.globalScore != null ? deepSc.globalScore.toFixed(2) : '—') + '</div>' +
+          '<div style="font-size:10px;color:rgba(255,255,255,0.8)">' + deepSc.n + ' respondentes</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:16px 18px">' + groupBars + '</div>' +
+    '</div>';
+  }).join('');
+
+  // Roadmap priorities
+  var roadmapItems = dimsSorted.slice(0, 3).map(function(x, i) {
+    var meta = DIM_META[x.dim.id];
+    var m = getM(x.score);
+    var priority = i === 0 ? "Prioridad 1 — Intervención Inmediata" : i === 1 ? "Prioridad 2 — Intervención a 60 días" : "Prioridad 3 — Intervención a 90 días";
+    return '<div style="display:flex;gap:12px;margin-bottom:12px;page-break-inside:avoid">' +
+      '<div style="width:28px;height:28px;border-radius:50%;background:' + m.color + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">' + (i+1) + '</div>' +
+      '<div style="flex:1;border:1px solid #E5E7EB;border-radius:8px;padding:10px 14px">' +
+        '<div style="font-size:10px;color:' + m.color + ';font-weight:700;text-transform:uppercase;margin-bottom:2px">' + priority + '</div>' +
+        '<div style="font-size:13px;font-weight:700;color:' + CHARCOAL + '">' + meta.es + ' — ' + x.score.toFixed(2) + '</div>' +
+        '<div style="font-size:11px;color:' + MUTED + ';margin-top:4px">' + meta.en + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">' +
+    '<title>OPRI™ Report — ' + eng.company + '</title>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">' +
+    '<style>' +
+      'body{font-family:"Jost",sans-serif;background:#fff;color:' + CHARCOAL + ';margin:0;padding:0}' +
+      '@media print{.no-print{display:none!important}body{font-size:11px}@page{margin:15mm}}' +
+      '.page{max-width:900px;margin:0 auto;padding:0 32px 48px}' +
+      'h2{font-family:"Cormorant Garamond",serif;font-weight:600;margin:0 0 4px 0}' +
+      '.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:' + MUTED + ';margin:28px 0 12px 0;padding-bottom:6px;border-bottom:2px solid ' + GOLD + '}' +
+    '</style></head><body>' +
+
+    // Print button
+    '<div class="no-print" style="background:' + GREEN + ';padding:12px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100">' +
+      '<div style="font-family:\'Cormorant Garamond\',serif;font-size:18px;color:white;font-weight:600">OPRI™ Enterprise · Reporte</div>' +
+      '<button onclick="window.print()" style="background:' + GOLD + ';color:' + CHARCOAL + ';border:none;padding:8px 20px;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px">⬇ Descargar PDF</button>' +
+    '</div>' +
+
+    '<div class="page">' +
+
+    // Cover
+    '<div style="background:linear-gradient(135deg,' + GREEN + ',' + GREEN_MID + ');border-radius:12px;padding:40px;margin:28px 0 24px;color:white">' +
+      '<div style="font-size:9px;letter-spacing:0.15em;color:' + GOLD + ';text-transform:uppercase;margin-bottom:8px">Promundial Consulting Group · OPRI™ Enterprise Edition</div>' +
+      '<h2 style="font-size:36px;color:white;margin:0 0 6px 0">' + eng.company + '</h2>' +
+      '<div style="font-size:14px;color:rgba(255,255,255,0.8);margin-bottom:24px">Organizational Performance & Resilience Index™ · Reporte Ejecutivo</div>' +
+      '<div style="display:flex;gap:20px;flex-wrap:wrap">' +
+        '<div><div style="font-size:10px;color:' + GOLD + ';text-transform:uppercase;letter-spacing:0.08em">OPRI™ Score</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:42px;font-weight:700;line-height:1">' + mainScores.opri.toFixed(2) + '</div><div style="font-size:11px;color:' + maturity.color + ';background:rgba(255,255,255,0.15);padding:2px 10px;border-radius:99px;display:inline-block;font-weight:700">' + maturity.es + ' / ' + maturity.en + '</div></div>' +
+        '<div style="border-left:1px solid rgba(255,255,255,0.2);padding-left:20px"><div style="font-size:10px;color:' + GOLD + ';text-transform:uppercase;letter-spacing:0.08em">Respondentes</div><div style="font-size:28px;font-weight:700">' + mainScores.n + '</div></div>' +
+        (mainScores.paiGlobal != null ? '<div style="border-left:1px solid rgba(255,255,255,0.2);padding-left:20px"><div style="font-size:10px;color:' + GOLD + ';text-transform:uppercase;letter-spacing:0.08em">PAI™</div><div style="font-size:28px;font-weight:700">' + mainScores.paiGlobal.toFixed(2) + '</div><div style="font-size:11px;color:rgba(255,255,255,0.7)">' + getPAI(mainScores.paiGlobal).es + '</div></div>' : '') +
+        '<div style="border-left:1px solid rgba(255,255,255,0.2);padding-left:20px"><div style="font-size:10px;color:' + GOLD + ';text-transform:uppercase;letter-spacing:0.08em">Consultor</div><div style="font-size:16px;font-weight:600">' + (eng.consultant || 'Promundial') + '</div><div style="font-size:11px;color:rgba(255,255,255,0.7)">' + date + '</div></div>' +
+      '</div>' +
+    '</div>' +
+
+    // Executive Summary
+    '<div class="section-title">Resumen Ejecutivo / Executive Summary</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">' +
+      '<div style="background:#F8F4EC;border-radius:8px;padding:16px;border-left:3px solid ' + GOLD + '">' +
+        '<div style="font-size:10px;font-weight:700;color:' + GOLD + ';text-transform:uppercase;margin-bottom:6px">Español</div>' +
+        '<p style="font-size:13px;line-height:1.7;margin:0;color:' + CHARCOAL + '">' + (aiInterpretations.summary_es || '') + '</p>' +
+      '</div>' +
+      '<div style="background:#F0F7FF;border-radius:8px;padding:16px;border-left:3px solid ' + BLUE + '">' +
+        '<div style="font-size:10px;font-weight:700;color:' + BLUE + ';text-transform:uppercase;margin-bottom:6px">English</div>' +
+        '<p style="font-size:13px;line-height:1.7;margin:0;color:' + CHARCOAL + '">' + (aiInterpretations.summary_en || '') + '</p>' +
+      '</div>' +
+    '</div>' +
+
+    // Scores overview
+    '<div class="section-title">Perfil de Capacidades / Capability Profile</div>' +
+    '<div style="display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start;margin-bottom:24px">' +
+      '<div>' + gaugeHTML(mainScores.opri, maturity.color, 140) + '</div>' +
+      '<div>' + barHTML(mainDims, mainScores) + '</div>' +
+    '</div>' +
+
+    // PAI
+    (mainScores.paiGlobal != null ? '<div class="section-title">PAI™ — Perception Alignment Index</div>' +
+    '<div style="margin-bottom:24px">' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
+        '<div style="font-family:\'Cormorant Garamond\',serif;font-size:32px;font-weight:600;color:' + getPAI(mainScores.paiGlobal).color + '">' + mainScores.paiGlobal.toFixed(2) + '</div>' +
+        '<div><div style="font-size:11px;color:' + CHARCOAL + ';font-weight:600">' + getPAI(mainScores.paiGlobal).es + ' / ' + getPAI(mainScores.paiGlobal).en + '</div><div style="font-size:11px;color:' + MUTED + '">Gap promedio entre Liderazgo y Organización</div></div>' +
+      '</div>' +
+      paiTableHTML(mainDims, mainScores) +
+    '</div>' : '') +
+
+    // Dimension details
+    '<div class="section-title">Análisis por Dimensión / Dimension Analysis</div>' +
+    dimSections +
+
+    // Deep Dive
+    (deepSections ? '<div class="section-title">Deep Dive — Módulos Avanzados</div>' + deepSections : '') +
+
+    // Roadmap
+    '<div class="section-title">Roadmap de Intervención / Intervention Roadmap</div>' +
+    '<div style="margin-bottom:24px">' + roadmapItems + '</div>' +
+
+    // Footer
+    '<div style="border-top:2px solid ' + GOLD + ';padding-top:16px;display:flex;justify-content:space-between;align-items:center;margin-top:32px">' +
+      '<div style="font-family:\'Cormorant Garamond\',serif;font-size:16px;color:' + GREEN + ';font-weight:600">Promundial Consulting Group</div>' +
+      '<div style="font-size:10px;color:' + MUTED + ';text-align:right">OPRI™ Enterprise Edition · Confidencial · ' + date + '<br>© ' + new Date().getFullYear() + ' Promundial Consulting Group · All rights reserved</div>' +
+    '</div>' +
+
+    '</div></body></html>';
+
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
+
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
