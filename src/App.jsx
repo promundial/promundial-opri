@@ -1684,12 +1684,17 @@ function EngagementSurveyPage({ code }) {
       const coreDone = completedSurveys.indexOf("core") >= 0;
       const fullDone = completedSurveys.indexOf("full") >= 0;
 
-      // Determine if the respondent has completed everything required
-      const coreOnly = coreDone && !l2.active;
-      const fullRequired = l2.active;
-      const deepRequired = fullDone && activeMods.length > 0;
-      const allDeepDone = deepRequired && activeMods.every(function(m) { return completedSurveys.indexOf("deep_" + m.id) >= 0; });
-      const everythingDone = coreOnly || (fullRequired && fullDone && (!deepRequired || allDeepDone));
+      // Use ONLY this respondent's session to determine what to show.
+      // Compute scores from their own submitted responses (stored in Airtable but
+      // we match by session: after coreDone we use aggregate scores to determine
+      // whether Full/Deep are needed — but only show them after this person completed Core).
+      const myL2 = coreDone ? checkL2(coreScores) : { active: false, reasons: [] };
+      const myL3 = fullDone ? checkL3(fullScores) : { mods: [], fdd: false, reasons: [] };
+      const myActiveMods = DEEP_MODULES.filter(function(m) { return myL3.mods.indexOf(m.id) >= 0; });
+
+      const coreOnly = coreDone && !myL2.active;
+      const allDeepDone = myActiveMods.length > 0 && myActiveMods.every(function(m) { return completedSurveys.indexOf("deep_" + m.id) >= 0; });
+      const everythingDone = coreOnly || (coreDone && fullDone && myActiveMods.length === 0) || (coreDone && fullDone && allDeepDone);
 
       if (everythingDone) {
         return (
@@ -1715,27 +1720,30 @@ function EngagementSurveyPage({ code }) {
         <div style={{ padding: "22px 18px", maxWidth: 540, margin: "0 auto" }}>
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 4 }}>{engagement.company}</div>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 20 }}>OPRI™ Core Survey · Complete su diagnóstico</div>
+
+          {/* Level 1 — always visible */}
           <SurveyCard level="Level 1" badge={coreDone ? "✓ Completado" : "Iniciar"} label="OPRI Core 25" desc="Diagnóstico rápido · 25 preguntas · ~8 min" color={GREEN} status={coreDone ? "done" : "available"} onClick={coreDone ? undefined : function() { setActiveSurvey({ id: "core" }); }} />
-          {coreRR.length > 0 && l2.active && (
+
+          {/* Level 2 — only shown after THIS respondent completes Core */}
+          {coreDone && myL2.active && (
             <SurveyCard level="Level 2" badge={fullDone ? "✓ Completado" : "Activado"} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status={fullDone ? "done" : "activated"} triggers={[]} onClick={fullDone ? undefined : function() { setActiveSurvey({ id: "full" }); }} />
           )}
-          {coreRR.length > 0 && !l2.active && (
+          {coreDone && !myL2.active && (
             <div style={{ padding: "13px 14px", background: "#DCFCE7", borderRadius: 9, border: "1px solid " + GREEN_LT + "55", marginTop: 8 }}>
               <div style={{ fontSize: 11, color: GREEN, fontWeight: 700, marginBottom: 2 }}>✓ Diagnóstico Core completo</div>
               <div style={{ fontSize: 12, color: GREEN_MID }}>Sus resultados han sido registrados. Gracias por participar.</div>
             </div>
           )}
-          {fullRR.length > 0 && activeMods.length > 0 && (
+
+          {/* Level 3 — only shown after THIS respondent completes Full */}
+          {fullDone && myActiveMods.length > 0 && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 10, color: MUTED, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 7 }}>
-                {"Level 3 — Deep Dive" + (l3.fdd ? " · Full Deep Dive activado" : "")}
-              </div>
-              {activeMods.map(function(m) {
+              <div style={{ fontSize: 10, color: MUTED, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 7 }}>Level 3 — Deep Dive</div>
+              {myActiveMods.map(function(m) {
                 const deepDone = completedSurveys.indexOf("deep_" + m.id) >= 0;
                 const qCount = m.groups.reduce(function(sum, g) { return sum + g.qs.length; }, 0);
-                const trigger = l3.reasons.find(function(r) { return r.indexOf(m.code) >= 0 || r.indexOf("Full Deep Dive") >= 0; });
                 return (
-                  <SurveyCard key={m.id} level={m.index} badge={deepDone ? "✓ Completado" : "Activado"} label={m.fullName} desc={qCount + " preguntas"} color={m.color} status={deepDone ? "done" : "activated"} triggers={deepDone ? [] : (trigger ? [trigger] : [])} onClick={deepDone ? undefined : function() { setActiveSurvey({ id: "deep_" + m.id, mod: m }); }} />
+                  <SurveyCard key={m.id} level={m.index} badge={deepDone ? "✓ Completado" : "Activado"} label={m.fullName} desc={qCount + " preguntas"} color={m.color} status={deepDone ? "done" : "activated"} triggers={[]} onClick={deepDone ? undefined : function() { setActiveSurvey({ id: "deep_" + m.id, mod: m }); }} />
                 );
               })}
             </div>
