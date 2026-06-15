@@ -419,22 +419,27 @@ function computeOPRI(responses, dims) {
     const qids = d.questions.map(function(q) { return q.id; });
     const vals = [];
     responses.forEach(function(r) {
+      if (!r.answers) return;
       qids.forEach(function(qid) {
         if (r.answers[qid] != null) vals.push(r.answers[qid]);
       });
     });
     dimScores[d.id] = vals.length > 0 ? avg(vals) : null;
   });
-  const opri = dims.reduce(function(sum, d) {
-    return sum + (dimScores[d.id] != null ? dimScores[d.id] * d.weight : 0);
+  // Normalize by active weight sum to avoid deflated scores when some dims have no answers
+  const activeWeight = dims.reduce(function(sum, d) {
+    return sum + (dimScores[d.id] != null ? d.weight : 0);
   }, 0);
-  const lead = responses.filter(function(r) { return PAI_LEAD.indexOf(r.meta.level) >= 0; });
-  const org  = responses.filter(function(r) { return PAI_ORG.indexOf(r.meta.level) >= 0; });
+  const opri = activeWeight > 0 ? dims.reduce(function(sum, d) {
+    return sum + (dimScores[d.id] != null ? (dimScores[d.id] * d.weight) / activeWeight : 0);
+  }, 0) : 0;
+  const lead = responses.filter(function(r) { return r.meta && PAI_LEAD.indexOf(r.meta.level) >= 0; });
+  const org  = responses.filter(function(r) { return r.meta && (PAI_ORG.indexOf(r.meta.level) >= 0 || (!r.meta.level && PAI_LEAD.indexOf(r.meta.level) < 0)); });
   const paiByDim = {};
   dims.forEach(function(d) {
     const qids = d.questions.map(function(q) { return q.id; });
-    const lVals = []; lead.forEach(function(r) { qids.forEach(function(qid) { if (r.answers[qid] != null) lVals.push(r.answers[qid]); }); });
-    const oVals = []; org.forEach(function(r) { qids.forEach(function(qid) { if (r.answers[qid] != null) oVals.push(r.answers[qid]); }); });
+    const lVals = []; lead.forEach(function(r) { if (!r.answers) return; qids.forEach(function(qid) { if (r.answers[qid] != null) lVals.push(r.answers[qid]); }); });
+    const oVals = []; org.forEach(function(r) { if (!r.answers) return; qids.forEach(function(qid) { if (r.answers[qid] != null) oVals.push(r.answers[qid]); }); });
     const ls = lVals.length > 0 ? avg(lVals) : null;
     const os = oVals.length > 0 ? avg(oVals) : null;
     paiByDim[d.id] = { ls: ls, os: os, gap: ls != null && os != null ? Math.abs(ls - os) : null };
@@ -443,25 +448,25 @@ function computeOPRI(responses, dims) {
   const paiGlobal = gapVals.length > 0 ? avg(gapVals) : null;
   const heatLevel = {};
   LEVELS.forEach(function(lv) {
-    const rr = responses.filter(function(r) { return r.meta.level === lv; });
+    const rr = responses.filter(function(r) { return r.meta && r.meta.level === lv; });
     if (rr.length === 0) { heatLevel[lv] = null; return; }
     const scores = {};
     dims.forEach(function(d) {
       const qids = d.questions.map(function(q) { return q.id; });
-      const vals = []; rr.forEach(function(r) { qids.forEach(function(qid) { if (r.answers[qid] != null) vals.push(r.answers[qid]); }); });
+      const vals = []; rr.forEach(function(r) { if (!r.answers) return; qids.forEach(function(qid) { if (r.answers[qid] != null) vals.push(r.answers[qid]); }); });
       scores[d.id] = vals.length > 0 ? avg(vals) : null;
     });
     heatLevel[lv] = { count: rr.length, scores: scores };
   });
   const areas = [];
-  responses.forEach(function(r) { if (r.meta.area && areas.indexOf(r.meta.area) < 0) areas.push(r.meta.area); });
+  responses.forEach(function(r) { if (r.meta && r.meta.area && areas.indexOf(r.meta.area) < 0) areas.push(r.meta.area); });
   const heatArea = {};
   areas.forEach(function(area) {
-    const rr = responses.filter(function(r) { return r.meta.area === area; });
+    const rr = responses.filter(function(r) { return r.meta && r.meta.area === area; });
     const scores = {};
     dims.forEach(function(d) {
       const qids = d.questions.map(function(q) { return q.id; });
-      const vals = []; rr.forEach(function(r) { qids.forEach(function(qid) { if (r.answers[qid] != null) vals.push(r.answers[qid]); }); });
+      const vals = []; rr.forEach(function(r) { if (!r.answers) return; qids.forEach(function(qid) { if (r.answers[qid] != null) vals.push(r.answers[qid]); }); });
       scores[d.id] = vals.length > 0 ? avg(vals) : null;
     });
     heatArea[area] = { count: rr.length, scores: scores };
@@ -474,12 +479,12 @@ function computeDeep(responses, mod) {
   const allQs = [];
   mod.groups.forEach(function(g) { g.qs.forEach(function(q) { allQs.push(q); }); });
   const globalVals = [];
-  responses.forEach(function(r) { allQs.forEach(function(q) { if (r.answers[q.id] != null) globalVals.push(r.answers[q.id]); }); });
+  responses.forEach(function(r) { if (!r.answers) return; allQs.forEach(function(q) { if (r.answers[q.id] != null) globalVals.push(r.answers[q.id]); }); });
   const globalScore = globalVals.length > 0 ? avg(globalVals) : null;
   const groupScores = {};
   mod.groups.forEach(function(g) {
     const vals = [];
-    responses.forEach(function(r) { g.qs.forEach(function(q) { if (r.answers[q.id] != null) vals.push(r.answers[q.id]); }); });
+    responses.forEach(function(r) { if (!r.answers) return; g.qs.forEach(function(q) { if (r.answers[q.id] != null) vals.push(r.answers[q.id]); }); });
     groupScores[g.label] = vals.length > 0 ? avg(vals) : null;
   });
   return { globalScore: globalScore, groupScores: groupScores, n: responses.length };
@@ -595,7 +600,7 @@ function SurveyHeader({ title, sub, accent, pct, onLogout }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 9, color: GOLD, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 3 }}>OPRI™ Enterprise</div>
-          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 19, color: WHITE, fontWeight: 600 }}>{title}</div>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 19, color: WHITE, fontWeight: 600, wordBreak: "break-word" }}>{title}</div>
           <div style={{ fontSize: 11, color: GOLD_PALE, marginTop: 2 }}>{sub}</div>
         </div>
         {onLogout && (
@@ -619,11 +624,11 @@ function LikertQuestion({ qid, text, value, color, onChange }) {
       <p style={{ fontSize: 13, color: CHARCOAL, marginBottom: 11, lineHeight: 1.5, margin: "0 0 11px 0" }}>
         <span style={{ color: color, fontWeight: 700, marginRight: 6 }}>{qid}</span>{text}
       </p>
-      <div style={{ display: "flex", gap: 4 }}>
+      <div style={{ display: "flex", gap: 3 }}>
         {[1, 2, 3, 4, 5].map(function(v) {
           return (
             <button key={v} onClick={function() { onChange(v); }} style={{
-              flex: 1, padding: "8px 2px", borderRadius: 6,
+              flex: 1, padding: "8px 0px", borderRadius: 6, minWidth: 0,
               border: value === v ? "2px solid " + color : "1px solid " + CREAM_DK,
               background: value === v ? color + "18" : CREAM,
               color: value === v ? color : MUTED,
@@ -776,12 +781,12 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
   return (
     <div>
       <SurveyHeader title={dim.short + " · " + (dimIdx + 1) + "/" + dims.length} sub={dim.label} accent={dim.color} pct={pct} onLogout={onLogout} />
-      <div style={{ padding: "16px 18px 26px", maxWidth: 560, margin: "0 auto" }}>
+      <div style={{ padding: "16px 14px 26px", maxWidth: 560, margin: "0 auto", width: "100%" }}>
         <p style={{ fontSize: 10, color: MUTED_LT, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>{answered}/{allQs.length}</p>
         {dim.questions.map(function(q) {
           return <LikertQuestion key={q.id} qid={q.id} text={q.text} value={answers[q.id]} color={dim.color} onChange={function(v) { setAnswers(function(p) { const n = Object.assign({}, p); n[q.id] = v; return n; }); }} />;
         })}
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
           {dimIdx > 0 && <button onClick={function() { var ni = dimIdx - 1; handleAdvanceDim(ni, answers); }} style={btn(MUTED, false)}>← Anterior</button>}
           {dimIdx < dims.length - 1
             ? <button disabled={!dimDone} onClick={function() { var ni = dimIdx + 1; var updated = answers; handleAdvanceDim(ni, updated); }} style={btn(dim.color, !dimDone)}>Siguiente →</button>
@@ -841,12 +846,12 @@ function DeepSurvey({ mod, onDone, onBack, engagementCode, inheritedMeta, onSurv
   return (
     <div>
       <SurveyHeader title={grp.label} sub={mod.index + " · " + (groupIdx + 1) + "/" + mod.groups.length} accent={mod.color} pct={pct} onLogout={onLogout} />
-      <div style={{ padding: "16px 18px 26px", maxWidth: 560, margin: "0 auto" }}>
+      <div style={{ padding: "16px 14px 26px", maxWidth: 560, margin: "0 auto", width: "100%" }}>
         <p style={{ fontSize: 10, color: MUTED_LT, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>{answered}/{allQs.length}</p>
         {grp.qs.map(function(q) {
           return <LikertQuestion key={q.id} qid={q.id} text={q.text} value={answers[q.id]} color={mod.color} onChange={function(v) { setAnswers(function(p) { const n = Object.assign({}, p); n[q.id] = v; return n; }); }} />;
         })}
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
           {groupIdx > 0 && <button onClick={function() { setGroupIdx(function(i) { return i - 1; }); }} style={btn(MUTED, false)}>← Anterior</button>}
           {groupIdx < mod.groups.length - 1
             ? <button disabled={!grpDone} onClick={function() { setGroupIdx(function(i) { return i + 1; }); }} style={btn(mod.color, !grpDone)}>Siguiente →</button>
@@ -867,7 +872,7 @@ function CascadeSelector({ coreScores, fullScores, deepCounts, onSelect }) {
   const nFull = fullScores ? fullScores.n : 0;
 
   return (
-    <div style={{ padding: "20px 18px", maxWidth: 560, margin: "0 auto" }}>
+    <div style={{ padding: "20px 14px", maxWidth: 560, margin: "0 auto", width: "100%" }}>
       <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 21, color: GREEN, marginBottom: 3 }}>Aplicar Diagnóstico</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 18 }}>Los módulos se activan automáticamente según los resultados.</div>
 
@@ -919,7 +924,7 @@ function SurveyCard({ level, badge, label, desc, color, status, triggers, lockMs
   const bgColor = done ? "#F0FDF4" : (locked ? "#F9F9F7" : WHITE);
   return (
     <div style={{ marginBottom: 7, borderRadius: 10, border: "1px solid " + borderColor, background: bgColor, overflow: "hidden", opacity: locked ? 0.65 : 1 }}>
-      <button onClick={(locked || done) ? undefined : onClick} disabled={locked || done} style={{ display: "flex", alignItems: "center", gap: 11, width: "100%", padding: "12px 14px", background: "transparent", border: "none", cursor: (locked || done) ? "default" : "pointer", textAlign: "left", fontFamily: "inherit" }}>
+      <button onClick={(locked || done) ? undefined : onClick} disabled={locked || done} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "12px 12px", background: "transparent", border: "none", cursor: (locked || done) ? "default" : "pointer", textAlign: "left", fontFamily: "inherit" }}>
         <div style={{ width: 32, height: 32, borderRadius: 7, background: done ? GREEN_LT + "22" : color + (locked ? "0D" : "18"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           {done ? <span style={{ fontSize: 15 }}>✓</span> : locked ? <span style={{ fontSize: 13 }}>🔒</span> : <div style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />}
         </div>
@@ -998,8 +1003,8 @@ function PAIDash({ tag, title, dims, responses }) {
   const rr = responses.filter(function(r) { return r.survey === tag; });
   const sc = computeOPRI(rr, dims);
   if (!sc) return <div style={{ padding: 40, textAlign: "center", color: MUTED_LT }}>Sin datos aún.</div>;
-  const lC = rr.filter(function(r) { return PAI_LEAD.indexOf(r.meta.level) >= 0; }).length;
-  const oC = rr.filter(function(r) { return PAI_ORG.indexOf(r.meta.level) >= 0; }).length;
+  const lC = rr.filter(function(r) { return r.meta && PAI_LEAD.indexOf(r.meta.level) >= 0; }).length;
+  const oC = rr.filter(function(r) { return r.meta && PAI_ORG.indexOf(r.meta.level) >= 0; }).length;
   const paiValid = sc.paiGlobal != null && lC > 0 && oC > 0;
   return (
     <div style={{ padding: "18px 16px", maxWidth: 640, margin: "0 auto" }}>
@@ -1052,7 +1057,7 @@ function PAIDash({ tag, title, dims, responses }) {
           </div>
           <div style={{ background: WHITE, borderRadius: 10, padding: "14px", border: "1px solid " + CREAM_DK }}>
             <SectionHeader title="OPRI × PAI Matrix" />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 6 }}>
               {[
                 { label: "Aligned & Capable", sub: "Capacidades fuertes y visión compartida.", color: GREEN, active: sc.opri >= 3.5 && sc.paiGlobal < 0.7 },
                 { label: "Capable but Disconnected", sub: "Capacidades fuertes, percepción divergente.", color: AMBER, active: sc.opri >= 3.5 && sc.paiGlobal >= 0.7 },
@@ -1200,7 +1205,7 @@ function RespondenteTable({ responses, dims }) {
   const allQs = [];
   dims.forEach(function(d) { d.questions.forEach(function(q) { allQs.push(q); }); });
   function overallScore(r) {
-    const vals = allQs.map(function(q) { return r.answers[q.id]; }).filter(function(v) { return v != null; });
+    const vals = r.answers ? allQs.map(function(q) { return r.answers[q.id]; }).filter(function(v) { return v != null; }) : [];
     return vals.length > 0 ? avg(vals) : null;
   }
   return (
@@ -1223,9 +1228,9 @@ function RespondenteTable({ responses, dims }) {
             {responses.slice().reverse().map(function(r, i) {
               return (
                 <tr key={r.id} style={{ borderTop: "1px solid " + CREAM_DK, background: i % 2 === 0 ? WHITE : CREAM + "44" }}>
-                  <td style={{ padding: "6px 11px", fontSize: 12 }}>{r.meta.name || "—"}</td>
-                  <td style={{ padding: "6px 9px", fontSize: 11, color: MUTED }}>{r.meta.level}</td>
-                  <td style={{ padding: "6px 9px", fontSize: 11, color: MUTED }}>{r.meta.area || "—"}</td>
+                  <td style={{ padding: "6px 11px", fontSize: 12 }}>{(r.meta && r.meta.name) || "—"}</td>
+                  <td style={{ padding: "6px 9px", fontSize: 11, color: MUTED }}>{(r.meta && r.meta.level) || "—"}</td>
+                  <td style={{ padding: "6px 9px", fontSize: 11, color: MUTED }}>{(r.meta && r.meta.area) || "—"}</td>
                   <td style={{ padding: "6px 9px", textAlign: "center" }}><ScoreBadge score={overallScore(r)} size="sm" /></td>
                   <td style={{ padding: "6px 9px", textAlign: "center", fontSize: 10, color: MUTED_LT }}>{new Date(r.timestamp).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}</td>
                 </tr>
@@ -1389,7 +1394,7 @@ function HomeScreen({ responses, coreScores, fullScores, l2, l3, activeMods, dee
   const fullN  = responses.filter(function(r) { return r.survey === "full"; }).length;
 
   return (
-    <div style={{ padding: "22px 18px", maxWidth: 540, margin: "0 auto" }}>
+    <div style={{ padding: "22px 14px", maxWidth: 540, margin: "0 auto", width: "100%" }}>
       <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 24, color: GREEN, marginBottom: 4, lineHeight: 1.2 }}>Organizational Performance & Resilience Index</div>
       <div style={{ fontSize: 12, color: MUTED, marginBottom: 20, lineHeight: 1.6 }}>Diagnóstico en cascada · activación automática basada en resultados</div>
       <div style={{ background: WHITE, borderRadius: 11, padding: "16px", border: "1px solid " + CREAM_DK, marginBottom: 18 }}>
@@ -1506,8 +1511,8 @@ function AdminPanel({ password, onExit }) {
     const activeMods = DEEP_MODULES.filter(function(m) { return l3.mods.indexOf(m.id) >= 0; });
     return (
       <div style={{ fontFamily: "'Jost', sans-serif", background: CREAM, minHeight: "100vh" }}>
-        <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');"}</style>
-        <div style={{ background: GREEN, padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid " + GOLD }}>
+        <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{overflow-x:hidden;width:100%;max-width:100vw}body{overflow-x:hidden}.rg-1col{display:grid;grid-template-columns:1fr}.rg-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.rg-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}.rg-auto1fr{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start}@media(max-width:600px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}.rg-auto1fr{grid-template-columns:1fr!important}.hide-mobile{display:none!important}.px-mobile{padding-left:12px!important;padding-right:12px!important}.text-sm-mobile{font-size:11px!important}.flex-col-mobile{flex-direction:column!important;align-items:flex-start!important}.w-full-mobile{width:100%!important}.gap-mobile{gap:8px!important}}@media(max-width:400px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}}"}</style>
+        <div style={{ background: GREEN, padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid " + GOLD, flexWrap: "wrap", gap: 8 }}>
           <div>
             <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, color: WHITE, fontWeight: 600 }}>{selectedEng.company}</div>
             <div style={{ fontSize: 9, color: GOLD, textTransform: "uppercase", letterSpacing: "0.1em" }}>OPRI™ Resultados · {selectedEng.code}</div>
@@ -1526,8 +1531,8 @@ function AdminPanel({ password, onExit }) {
 
   return (
     <div style={{ fontFamily: "'Jost', sans-serif", background: CREAM, minHeight: "100vh" }}>
-      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');"}</style>
-      <div style={{ background: GREEN, padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid " + GOLD }}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{overflow-x:hidden;width:100%;max-width:100vw}body{overflow-x:hidden}.rg-1col{display:grid;grid-template-columns:1fr}.rg-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.rg-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}.rg-auto1fr{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start}@media(max-width:600px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}.rg-auto1fr{grid-template-columns:1fr!important}.hide-mobile{display:none!important}.px-mobile{padding-left:12px!important;padding-right:12px!important}.text-sm-mobile{font-size:11px!important}.flex-col-mobile{flex-direction:column!important;align-items:flex-start!important}.w-full-mobile{width:100%!important}.gap-mobile{gap:8px!important}}@media(max-width:400px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}}"}</style>
+      <div style={{ background: GREEN, padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid " + GOLD, flexWrap: "wrap", gap: 8 }}>
         <div>
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, color: WHITE, fontWeight: 600 }}>OPRI™ Admin</div>
           <div style={{ fontSize: 9, color: GOLD, textTransform: "uppercase", letterSpacing: "0.1em" }}>Promundial Consulting Group</div>
@@ -1538,7 +1543,7 @@ function AdminPanel({ password, onExit }) {
         </div>
       </div>
 
-      <div style={{ padding: "22px 18px", maxWidth: 700, margin: "0 auto" }}>
+      <div style={{ padding: "22px 16px", maxWidth: 700, margin: "0 auto", width: "100%" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN }}>Engagements</div>
           <button onClick={function() { setCreating(true); }} style={btn(GREEN, false)}>+ Nuevo engagement</button>
@@ -1547,7 +1552,7 @@ function AdminPanel({ password, onExit }) {
         {creating && (
           <div style={{ background: WHITE, borderRadius: 12, padding: "20px", border: "2px solid " + GREEN + "44", marginBottom: 18 }}>
             <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, color: GREEN, marginBottom: 16 }}>Nuevo Engagement</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 12 }}>
               <div>
                 <label style={s.label}>Empresa *</label>
                 <input value={form.company} onChange={function(e) { setForm(function(p) { return Object.assign({}, p, { company: e.target.value }); }); }} placeholder="Ej. Banco Pichincha" style={s.input} />
@@ -1620,7 +1625,7 @@ function EngCard({ eng, onClose, onReopen, onResults, closed, password, onReload
   const isExpired = eng.close_date && new Date(eng.close_date) < new Date();
   return (
     <div style={{ background: WHITE, borderRadius: 10, padding: "14px 16px", border: "1px solid " + CREAM_DK, marginBottom: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, width: "100%" }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
             <span style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, color: GREEN, fontWeight: 600 }}>{eng.company}</span>
@@ -1631,13 +1636,13 @@ function EngCard({ eng, onClose, onReopen, onResults, closed, password, onReload
           </div>
           {!closed && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 11, color: MUTED_LT, fontFamily: "monospace" }}>{surveyUrl}</span>
+              <span style={{ fontSize: 11, color: MUTED_LT, fontFamily: "monospace", wordBreak: "break-all", flex: 1 }}>{surveyUrl}</span>
               <button onClick={copyLink} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: copied ? GREEN : MUTED }}>{copied ? "✓ Copiado" : "Copiar"}</button>
             </div>
           )}
-          {eng.close_date && <div style={{ fontSize: 11, color: MUTED_LT, marginTop: 3 }}>Cierre: {new Date(eng.close_date).toLocaleDateString("es-ES")}</div>}
+          {eng.close_date && <div style={{ fontSize: 11, color: MUTED_LT, marginTop: 3, wordBreak: "break-word" }}>Cierre: {new Date(eng.close_date).toLocaleDateString("es-ES")}</div>}
         </div>
-        <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: "100%" }}>
           <button onClick={function() { onResults(eng); }} style={Object.assign({}, btn(BLUE, false), { fontSize: 11, padding: "7px 14px" })}>Ver resultados</button>
           <button onClick={handleGenerateReport} disabled={generatingReport} style={Object.assign({}, btn(GOLD, generatingReport), { fontSize: 11, padding: "7px 14px", color: generatingReport ? MUTED_LT : CHARCOAL })}>{generatingReport ? "Generando…" : "📄 Reporte PDF"}</button>
           {!closed && <button onClick={function() { onClose(eng); }} style={Object.assign({}, btn(RED, false), { fontSize: 11, padding: "7px 14px" })}>Cerrar</button>}
@@ -1660,8 +1665,8 @@ function RespondentLogin({ company, onAuth }) {
   function handleKey(e) { if (e.key === "Enter") attempt(); }
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 24 }}>
-      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');"}</style>
-      <div style={{ background: WHITE, borderRadius: 14, padding: "36px 32px", maxWidth: 380, width: "100%", boxShadow: "0 4px 24px rgba(0,0,0,0.08)", border: "1px solid " + CREAM_DK }}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{overflow-x:hidden;width:100%;max-width:100vw}body{overflow-x:hidden}.rg-1col{display:grid;grid-template-columns:1fr}.rg-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.rg-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}.rg-auto1fr{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start}@media(max-width:600px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}.rg-auto1fr{grid-template-columns:1fr!important}.hide-mobile{display:none!important}.px-mobile{padding-left:12px!important;padding-right:12px!important}.text-sm-mobile{font-size:11px!important}.flex-col-mobile{flex-direction:column!important;align-items:flex-start!important}.w-full-mobile{width:100%!important}.gap-mobile{gap:8px!important}}@media(max-width:400px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}}"}</style>
+      <div style={{ background: WHITE, borderRadius: 14, padding: "28px 20px", maxWidth: 380, width: "100%", boxShadow: "0 4px 24px rgba(0,0,0,0.08)", border: "1px solid " + CREAM_DK }}>
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 28, color: GREEN, fontWeight: 600, marginBottom: 4 }}>OPRI™</div>
           <div style={{ fontSize: 10, color: GOLD, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 12 }}>Enterprise Edition · Promundial</div>
@@ -1755,14 +1760,14 @@ function EngagementSurveyPage({ code }) {
     }
   }
 
-  if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM }}><div style={{ textAlign: "center", color: MUTED }}><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 24, color: GREEN, marginBottom: 6 }}>OPRI™</div><div>Cargando…</div></div></div>;
+  if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 16 }}><div style={{ textAlign: "center", color: MUTED }}><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 24, color: GREEN, marginBottom: 6 }}>OPRI™</div><div>Cargando…</div></div></div>;
 
   if (!authenticated && engagement && engagement.status === "active") {
     return <RespondentLogin company={engagement.company} onAuth={function() { setAuthenticated(true); }} />;
   }
 
   if (!engagement) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 24 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 16, padding: 24 }}>
       <div style={{ textAlign: "center", maxWidth: 320 }}>
         <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
         <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 8 }}>Encuesta no encontrada</div>
@@ -1773,7 +1778,7 @@ function EngagementSurveyPage({ code }) {
 
   const isExpired = engagement.close_date && new Date(engagement.close_date) < new Date();
   if (engagement.status === "closed" || isExpired) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 24 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 16, padding: 24 }}>
       <div style={{ textAlign: "center", maxWidth: 340 }}>
         <div style={{ fontSize: 36, marginBottom: 12 }}>✓</div>
         <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 8 }}>Esta encuesta ha cerrado</div>
@@ -1811,12 +1816,12 @@ function EngagementSurveyPage({ code }) {
 
       if (everythingDone) {
         return (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", padding: "32px 24px", textAlign: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", padding: "32px 16px", textAlign: "center" }}>
             <div style={{ width: 64, height: 64, borderRadius: "50%", background: GREEN + "18", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
               <span style={{ fontSize: 30, color: GREEN }}>✓</span>
             </div>
             <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, color: GREEN, fontWeight: 600, marginBottom: 10 }}>¡Muchas gracias!</div>
-            <div style={{ fontSize: 14, color: MUTED, maxWidth: 320, lineHeight: 1.7, marginBottom: 6 }}>
+            <div style={{ fontSize: 14, color: MUTED, maxWidth: 320, lineHeight: 1.7, marginBottom: 6, wordBreak: "break-word" }}>
               {"Su participación en el diagnóstico OPRI™ de " + engagement.company + " ha sido registrada."}
             </div>
             <div style={{ fontSize: 13, color: MUTED_LT, maxWidth: 300, lineHeight: 1.6 }}>
@@ -1830,8 +1835,8 @@ function EngagementSurveyPage({ code }) {
       }
 
       return (
-        <div style={{ padding: "22px 18px", maxWidth: 540, margin: "0 auto" }}>
-          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 4 }}>{engagement.company}</div>
+        <div style={{ padding: "22px 14px", maxWidth: 540, margin: "0 auto", width: "100%" }}>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 4, wordBreak: "break-word" }}>{engagement.company}</div>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 20 }}>OPRI™ Core Survey · Complete su diagnóstico</div>
 
           {/* Level 1 — always visible */}
@@ -1871,8 +1876,8 @@ function EngagementSurveyPage({ code }) {
   }
 
   return (
-    <div style={{ fontFamily: "'Jost', sans-serif", background: CREAM, minHeight: "100vh", maxWidth: 800, margin: "0 auto" }}>
-      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');"}</style>
+    <div style={{ fontFamily: "'Jost', sans-serif", background: CREAM, minHeight: "100vh", maxWidth: 860, margin: "0 auto", width: "100%" }}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{overflow-x:hidden;width:100%;max-width:100vw}body{overflow-x:hidden}.rg-1col{display:grid;grid-template-columns:1fr}.rg-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.rg-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}.rg-auto1fr{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start}@media(max-width:600px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}.rg-auto1fr{grid-template-columns:1fr!important}.hide-mobile{display:none!important}.px-mobile{padding-left:12px!important;padding-right:12px!important}.text-sm-mobile{font-size:11px!important}.flex-col-mobile{flex-direction:column!important;align-items:flex-start!important}.w-full-mobile{width:100%!important}.gap-mobile{gap:8px!important}}@media(max-width:400px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}}"}</style>
       <div style={{ background: GREEN, padding: "12px 18px", borderBottom: "2px solid " + GOLD }}>
         <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, color: WHITE, fontWeight: 600 }}>OPRI™</div>
         <div style={{ fontSize: 9, color: GOLD, textTransform: "uppercase", letterSpacing: "0.1em" }}>Enterprise Edition · Promundial</div>
@@ -2516,7 +2521,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       '<div style="padding:16px 18px">' +
         (aiDim.es ? '<p style="font-size:12px;color:' + CHARCOAL + ';line-height:1.7;margin:0 0 6px 0"><strong>ES:</strong> ' + aiDim.es + '</p>' : '') +
         (aiDim.en ? '<p style="font-size:12px;color:' + MUTED + ';line-height:1.7;margin:0 0 14px 0"><strong>EN:</strong> ' + aiDim.en + '</p>' : '') +
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px">' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px">' +
           recBlock("🔧 LSS / I2E™ Innovation-to-Execution", recs.lss, "#EFF6FF", BLUE) +
           recBlock("👥 Belbin Team Roles", recs.belbin, "#F5F3FF", VIOLET) +
           recBlock("🎯 Leadership Excellence", recs.leadership, "#F0FDF4", GREEN) +
@@ -2552,7 +2557,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       var recs = sc != null ? getDeepRecs(m.id, g.label, sc) : null;
       var recsHtml = '';
       if (recs && sc < 3.5) {
-        recsHtml = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;padding:10px;background:#F9F9F7;border-radius:8px">' +
+        recsHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-top:10px;padding:10px;background:#F9F9F7;border-radius:8px">' +
           recBlock("🔧 LSS / I2E™", recs.lss.slice(0,2), "#EFF6FF", BLUE) +
           recBlock("👥 Belbin", recs.belbin.slice(0,2), "#F5F3FF", VIOLET) +
           recBlock("🎯 Leadership", recs.leadership.slice(0,2), "#F0FDF4", GREEN) +
@@ -2604,7 +2609,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     '<style>' +
       'body{font-family:"Jost",sans-serif;background:#fff;color:' + CHARCOAL + ';margin:0;padding:0}' +
       '@media print{.no-print{display:none!important}body{font-size:11px}@page{margin:15mm}}' +
-      '.page{max-width:900px;margin:0 auto;padding:0 32px 48px}' +
+      '.page{max-width:900px;margin:0 auto;padding:0 32px 48px}@media(max-width:600px){.page{padding:0 12px 32px}h2{font-size:20px!important}}' +
       'h2{font-family:"Cormorant Garamond",serif;font-weight:600;margin:0 0 4px 0}' +
       '.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:' + MUTED + ';margin:28px 0 12px 0;padding-bottom:6px;border-bottom:2px solid ' + GOLD + '}' +
     '</style></head><body>' +
@@ -2632,7 +2637,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
     // Executive Summary
     '<div class="section-title">Resumen Ejecutivo / Executive Summary</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:24px">' +
       '<div style="background:#F8F4EC;border-radius:8px;padding:16px;border-left:3px solid ' + GOLD + '">' +
         '<div style="font-size:10px;font-weight:700;color:' + GOLD + ';text-transform:uppercase;margin-bottom:6px">Español</div>' +
         '<p style="font-size:13px;line-height:1.7;margin:0;color:' + CHARCOAL + '">' + (aiInterpretations.summary_es || '') + '</p>' +
@@ -2645,7 +2650,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
     // Scores overview
     '<div class="section-title">Perfil de Capacidades / Capability Profile</div>' +
-    '<div style="display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start;margin-bottom:24px">' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;align-items:start;margin-bottom:24px">' +
       '<div>' + gaugeHTML(mainScores.opri, maturity.color, 140) + '</div>' +
       '<div>' + barHTML(mainDims, mainScores) + '</div>' +
     '</div>' +
@@ -2745,7 +2750,7 @@ function PublicApp() {
 
   if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, fontFamily: "sans-serif" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 16, fontFamily: "sans-serif" }}>
         <div style={{ textAlign: "center", color: MUTED }}>
           <div style={{ fontSize: 24, marginBottom: 8, color: GREEN }}>OPRI™</div>
           <div style={{ fontSize: 13 }}>Cargando…</div>
@@ -2757,10 +2762,10 @@ function PublicApp() {
   const hasData = responses.length > 0;
 
   return (
-    <div style={{ fontFamily: "'Jost', sans-serif", background: CREAM, minHeight: "100vh", maxWidth: 800, margin: "0 auto" }}>
-      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');"}</style>
+    <div style={{ fontFamily: "'Jost', sans-serif", background: CREAM, minHeight: "100vh", maxWidth: 860, margin: "0 auto", width: "100%" }}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{overflow-x:hidden;width:100%;max-width:100vw}body{overflow-x:hidden}.rg-1col{display:grid;grid-template-columns:1fr}.rg-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.rg-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}.rg-auto1fr{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start}@media(max-width:600px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}.rg-auto1fr{grid-template-columns:1fr!important}.hide-mobile{display:none!important}.px-mobile{padding-left:12px!important;padding-right:12px!important}.text-sm-mobile{font-size:11px!important}.flex-col-mobile{flex-direction:column!important;align-items:flex-start!important}.w-full-mobile{width:100%!important}.gap-mobile{gap:8px!important}}@media(max-width:400px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}}"}</style>
 
-      <div style={{ background: GREEN, padding: "12px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, borderBottom: "2px solid " + GOLD }}>
+      <div style={{ background: GREEN, padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, borderBottom: "2px solid " + GOLD, flexWrap: "wrap", gap: 6 }}>
         <div>
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, color: WHITE, fontWeight: 600, lineHeight: 1 }}>OPRI™</div>
           <div style={{ fontSize: 9, color: GOLD, textTransform: "uppercase", letterSpacing: "0.1em" }}>Enterprise Edition · Promundial</div>
@@ -2776,7 +2781,7 @@ function PublicApp() {
         </div>
       </div>
 
-      <div style={{ background: WHITE, borderBottom: "1px solid " + CREAM_DK, display: "flex" }}>
+      <div style={{ background: WHITE, borderBottom: "1px solid " + CREAM_DK, display: "flex", overflowX: "auto" }}>
         {[{ id: "home", icon: "⌂", label: "Inicio" }, { id: "survey", icon: "✎", label: "Diagnóstico" }, { id: "results", icon: "◈", label: "Resultados" }].map(function(t) {
           return (
             <button key={t.id} onClick={function() { handleNavigate(t.id); }} style={{ flex: 1, padding: "11px 4px", border: "none", background: "transparent", borderBottom: section === t.id ? "3px solid " + GOLD : "3px solid transparent", color: section === t.id ? GREEN : MUTED, fontSize: 11, fontWeight: section === t.id ? 700 : 500, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.06em", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontFamily: "inherit" }}>
