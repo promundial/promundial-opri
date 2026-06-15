@@ -2781,12 +2781,15 @@ export default function App() {
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, color: WHITE, fontWeight: 600, lineHeight: 1 }}>OPRI™</div>
           <div style={{ fontSize: 9, color: GOLD, textTransform: "uppercase", letterSpacing: "0.1em" }}>Enterprise Edition · Promundial</div>
         </div>
-        {coreScores && (
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 19, color: WHITE }}>{coreScores.opri.toFixed(2)}</div>
-            <div style={{ fontSize: 9, color: getMaturity(coreScores.opri).color, fontWeight: 700, textTransform: "uppercase" }}>{getMaturity(coreScores.opri).es}</div>
-          </div>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {coreScores && (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 19, color: WHITE }}>{coreScores.opri.toFixed(2)}</div>
+              <div style={{ fontSize: 9, color: getMaturity(coreScores.opri).color, fontWeight: 700, textTransform: "uppercase" }}>{getMaturity(coreScores.opri).es}</div>
+            </div>
+          )}
+          <button onClick={function() { window.location.href = "/admin"; }} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: 7, color: WHITE, fontSize: 11, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit" }}>Admin →</button>
+        </div>
       </div>
 
       <div style={{ background: WHITE, borderBottom: "1px solid " + CREAM_DK, display: "flex" }}>
