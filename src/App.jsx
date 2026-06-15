@@ -1905,6 +1905,7 @@ function paiTableHTML(dims, scores) {
 }
 
 // ── Recommendation logic ──────────────────────────────────────────────────────
+// Column labels: lss = "Lean Six Sigma / Operational Excellence & I2E™", belbin = "Belbin Team Roles", leadership = "Leadership Excellence"
 function getRecommendations(dimId, score) {
   var isCritical = score < 2.5;
   var isVulnerable = score >= 2.5 && score < 3.2;
@@ -1913,22 +1914,26 @@ function getRecommendations(dimId, score) {
   var recs = {
     alignment: {
       lss: isCritical ? [
+        "Taller de QFD (Quality Function Deployment) para traducir prioridades estratégicas en KPIs financieros y operativos",
         "Implementar VSM (Value Stream Mapping) del proceso de cascada estratégica",
-        "Taller de Hoshin Kanri / X-Matrix para alineación de objetivos",
-        "Definir KPIs ligados a prioridades estratégicas con metodología OKR",
+        "Hoshin Kanri / X-Matrix: alinear objetivos estratégicos con metas operativas por área",
+        "I2E™ Fase OBSERVE: diagnóstico de fricciones entre estrategia declarada y ejecución real",
       ] : isVulnerable ? [
-        "Mapeo de iniciativas actuales vs. prioridades estratégicas (matriz Urgente/Importante)",
-        "Implementar rutinas de seguimiento estratégico mensual (S&OP adaptado)",
+        "QFD Nivel 1: House of Quality para alinear voz del cliente con prioridades estratégicas",
+        "Mapeo de iniciativas actuales vs. prioridades estratégicas (Urgente/Importante + OKR)",
+        "I2E™ Fase DECODE: identificar por qué las prioridades no se traducen en acción",
+        "Rutinas de seguimiento estratégico mensual (S&OP adaptado)",
       ] : [
-        "Optimizar el proceso de comunicación estratégica hacia niveles operativos",
-        "Dashboard de seguimiento estratégico en tiempo real",
+        "QFD avanzado: despliegue a indicadores financieros (EVA, EBITDA) y operativos por proceso",
+        "I2E™ Fase SCALE: estandarizar el modelo de comunicación estratégica sin perder agilidad",
+        "Dashboard estratégico en tiempo real ligado a KPIs financieros",
       ],
       belbin: isCritical ? [
-        "Talleres Belbin para identificar quién puede ser Coordinador/Cerebro en el equipo directivo",
+        "Talleres Belbin para identificar Coordinador/Cerebro en el equipo directivo",
         "Análisis de roles faltantes en el equipo de planificación estratégica",
         "Workshop: 'Arquitectura de equipo para la ejecución estratégica'",
       ] : isVulnerable ? [
-        "Identificar perfiles Coordinador e Investigador de Recursos para liderar la comunicación estratégica",
+        "Identificar perfiles Coordinador e Investigador de Recursos para liderar comunicación estratégica",
         "Sesión de feedback Belbin con el equipo de dirección",
       ] : [
         "Aprovechar perfiles Especialista para profundizar en análisis estratégico",
@@ -1948,17 +1953,22 @@ function getRecommendations(dimId, score) {
     },
     execution: {
       lss: isCritical ? [
-        "Implementación de Lean Daily Management (LDM) con tableros visuales",
+        "Implementación de Lean Daily Management (LDM) con tableros visuales por área",
         "Programa Green Belt en áreas críticas de ejecución",
         "Mapa de flujo de valor (VSM) de los 3 procesos más críticos",
         "Sistema de gestión de problemas: Daily Standup + Escalamiento estructurado",
+        "I2E™ Fase EXPERIMENT: pilotos de mejora rápida en procesos de mayor impacto",
+        "I2E™ Fase EXECUTE: convertir mejoras en procesos, roles, KPIs y rutinas de accountability",
       ] : isVulnerable ? [
         "Implementar PDCA como ciclo estándar de mejora en cada área",
         "Definir estándares de proceso para las 5 rutinas operativas clave",
         "Dashboard operativo con semáforos de desempeño por área",
+        "I2E™ Fase ADAPT: traducir mejores prácticas al contexto cultural y tecnológico de la empresa",
+        "I2E™ Fase SUSTAIN: asegurar ownership y governance de mejoras implementadas",
       ] : [
         "Evolucionar de Lean hacia Six Sigma: reducción de variabilidad en procesos clave",
-        "Implementar sistema de sugerencias (Kaizen) para mejora continua desde la base",
+        "I2E™ Fase SCALE: estandarizar, desplegar y replicar modelo operativo sin perder agilidad",
+        "Sistema de sugerencias Kaizen + I2E™ para innovación incremental desde la base",
       ],
       belbin: isCritical ? [
         "Identificar perfiles Implementador y Finalizador — roles críticos en ejecución",
@@ -1988,17 +1998,21 @@ function getRecommendations(dimId, score) {
         "Diagnóstico de capacidad de gestión: análisis de rutinas directivas",
         "Implementar War Room / Sala de Situación para visibilidad de resultados",
         "Definir estándares de reuniones de liderazgo (agenda, frecuencia, outputs)",
+        "I2E™ Fase OBSERVE: mapear las fricciones en la dinámica del equipo directivo",
+        "I2E™ Fase DECODE: identificar el principio subyacente que bloquea la efectividad colectiva",
       ] : isVulnerable ? [
         "Estandarizar el proceso de toma de decisiones con datos (A3 Thinking)",
         "Implementar revisiones de desempeño estructuradas mensuales",
+        "I2E™ Fase ADAPT: adecuar modelo de liderazgo colectivo a cultura y capacidades actuales",
       ] : [
         "Evolucionar hacia gestión predictiva: de KPIs reactivos a leading indicators",
+        "I2E™ Fase SCALE: institucionalizar el modelo de liderazgo de alto rendimiento",
         "Sistema de gestión visual integrado entre niveles directivos",
       ],
       belbin: isCritical ? [
         "Diagnóstico Belbin completo del Comité Directivo",
         "Taller intensivo: 'Construcción de equipos directivos de alto rendimiento'",
-        "Identificación de roles ausentes: especialmente Coordinador, Cohesionador y Finalizador",
+        "Identificación de roles ausentes: Coordinador, Cohesionador y Finalizador",
         "Plan de intervención por perfil: fortalezas y zonas de desarrollo",
       ] : isVulnerable ? [
         "Sesión de retroalimentación Belbin entre pares directivos",
@@ -2026,13 +2040,17 @@ function getRecommendations(dimId, score) {
       lss: isCritical ? [
         "Implementar FMEA (Análisis de Modo y Efecto de Fallo) en procesos críticos",
         "Plan de continuidad operativa basado en análisis de riesgos",
-        "Taller de gestión del cambio con metodología ADKAR",
+        "I2E™ Fase OBSERVE: escanear el entorno — clientes, fricciones, benchmarks y señales de cambio",
+        "I2E™ Fase EXPERIMENT: probar rápido con prototipos antes de comprometer recursos",
+        "I2E™ Fase SUSTAIN: asegurar mejora continua y evolución permanente ante el cambio",
       ] : isVulnerable ? [
         "Implementar ciclos de retrospectiva mensual (Lessons Learned estructurado)",
-        "Desarrollar capacidad de prototipado rápido (MVP interno para iniciativas)",
+        "I2E™ Fase ADAPT: traducir aprendizajes al contexto real de cultura, procesos y tecnología",
+        "I2E™ Fase DECODE: identificar qué principios subyacentes bloquean la adaptación",
       ] : [
-        "Desarrollar una cultura de experimentación con pilotos controlados",
-        "Implementar sistema de gestión de ideas e innovación incremental",
+        "I2E™ Fase SCALE: estandarizar y replicar la capacidad de innovación sin perder agilidad",
+        "I2E™ Fase EXECUTE: convertir la innovación en procesos, KPIs y rutinas de gestión",
+        "Sistema de gestión de ideas e innovación incremental institucionalizado",
       ],
       belbin: isCritical ? [
         "Identificar perfiles Cerebro e Investigador de Recursos — clave para adaptabilidad",
@@ -2060,17 +2078,22 @@ function getRecommendations(dimId, score) {
       lss: isCritical ? [
         "Diagnóstico de clima organizacional + plan de acción estructurado",
         "Implementar programa de reconocimiento ligado a comportamientos clave",
-        "Taller de mejora del ambiente de trabajo (5S aplicado a cultura)",
+        "I2E™ Fase OBSERVE: entender las fricciones culturales desde la perspectiva de las personas",
+        "I2E™ Fase DECODE: identificar el principio que hace que la cultura actual persista",
+        "I2E™ Fase EXECUTE: convertir intervenciones culturales en rutinas, roles y KPIs visibles",
       ] : isVulnerable ? [
         "Diseñar sistema de reconocimiento peer-to-peer",
         "Implementar canales formales de comunicación interna bidireccional",
+        "I2E™ Fase ADAPT: adecuar iniciativas culturales al contexto real de cada área",
+        "I2E™ Fase SUSTAIN: asegurar ownership cultural con governance y evolución permanente",
       ] : [
+        "I2E™ Fase SCALE: replicar la cultura de alto rendimiento en toda la organización",
         "Programa de embajadores culturales en cada área",
         "Medición periódica de cultura con pulso trimestral",
       ],
       belbin: isCritical ? [
         "Taller Belbin para toda la organización: crear lenguaje común de roles y contribuciones",
-        "Usar Belbin como herramienta de reconocimiento: visibilizar las fortalezas de cada persona",
+        "Usar Belbin como herramienta de reconocimiento: visibilizar fortalezas de cada persona",
         "Programa de integración de equipos basado en complementariedad de roles",
       ] : isVulnerable ? [
         "Sesiones de team building basadas en perfiles Belbin",
@@ -2081,7 +2104,7 @@ function getRecommendations(dimId, score) {
       ],
       leadership: isCritical ? [
         "Programa de liderazgo cultural: 'Culture Starts at the Top'",
-        "Taller de seguridad psicológica para líderes (basado en trabajo de Amy Edmondson)",
+        "Taller de seguridad psicológica para líderes (Amy Edmondson)",
         "Intervención en dinámicas tóxicas: facilitación externa de conversaciones difíciles",
       ] : isVulnerable ? [
         "Programa de liderazgo empático y presencia ejecutiva",
@@ -2094,8 +2117,9 @@ function getRecommendations(dimId, score) {
   };
   return recs[dimId] || { lss: [], belbin: [], leadership: [] };
 }
-
 // ── Main report generator ─────────────────────────────────────────────────────
+var LOGO_B64 = "data:image/png;base64,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";
+
 async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_MODULES, computeOPRI, computeDeep, checkL2, checkL3) {
   var coreRR = allResponses.filter(function(r) { return r.survey === "core"; });
   var fullRR = allResponses.filter(function(r) { return r.survey === "full"; });
@@ -2189,7 +2213,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
         (aiDim.es ? '<p style="font-size:12px;color:' + CHARCOAL + ';line-height:1.7;margin:0 0 6px 0"><strong>ES:</strong> ' + aiDim.es + '</p>' : '') +
         (aiDim.en ? '<p style="font-size:12px;color:' + MUTED + ';line-height:1.7;margin:0 0 14px 0"><strong>EN:</strong> ' + aiDim.en + '</p>' : '') +
         '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px">' +
-          recBlock("🔧 Lean Six Sigma / Operational Excellence", recs.lss, "#EFF6FF", BLUE) +
+          recBlock("🔧 LSS / I2E™ Innovation-to-Execution", recs.lss, "#EFF6FF", BLUE) +
           recBlock("👥 Belbin Team Roles", recs.belbin, "#F5F3FF", VIOLET) +
           recBlock("🎯 Leadership Excellence", recs.leadership, "#F0FDF4", GREEN) +
         '</div>' +
@@ -2274,7 +2298,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
     // Cover
     '<div style="background:linear-gradient(135deg,' + GREEN + ',' + GREEN_MID + ');border-radius:12px;padding:40px;margin:28px 0 24px;color:white">' +
-      '<div style="font-size:9px;letter-spacing:0.15em;color:' + GOLD + ';text-transform:uppercase;margin-bottom:8px">Promundial Consulting Group · OPRI™ Enterprise Edition</div>' +
+      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px"><img src="' + LOGO_B64 + '" style="height:52px;width:auto;filter:brightness(0) invert(1);opacity:0.9" alt="Promundial"/><div style="font-size:9px;letter-spacing:0.15em;color:' + GOLD + ';text-transform:uppercase;line-height:1.6">Promundial Consulting Group<br>OPRI™ Enterprise Edition</div></div>' +
       '<h2 style="font-size:36px;color:white;margin:0 0 6px 0">' + eng.company + '</h2>' +
       '<div style="font-size:14px;color:rgba(255,255,255,0.8);margin-bottom:24px">Organizational Performance & Resilience Index™ · Reporte Ejecutivo</div>' +
       '<div style="display:flex;gap:20px;flex-wrap:wrap">' +
@@ -2328,7 +2352,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
     // Footer
     '<div style="border-top:2px solid ' + GOLD + ';padding-top:16px;display:flex;justify-content:space-between;align-items:center;margin-top:32px">' +
-      '<div style="font-family:\'Cormorant Garamond\',serif;font-size:16px;color:' + GREEN + ';font-weight:600">Promundial Consulting Group</div>' +
+      '<div style="display:flex;align-items:center;gap:8px"><img src="' + LOGO_B64 + '" style="height:28px;width:auto" alt="Promundial"/></div>' +
       '<div style="font-size:10px;color:' + MUTED + ';text-align:right">OPRI™ Enterprise Edition · Confidencial · ' + date + '<br>© ' + new Date().getFullYear() + ' Promundial Consulting Group · All rights reserved</div>' +
     '</div>' +
 
