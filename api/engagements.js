@@ -42,6 +42,7 @@ export default async function handler(req, res) {
       status: r.fields.status,
       close_date: r.fields.close_date,
       response_count: r.fields.response_count || 0,
+      survey_password: r.fields.survey_password || null,
     });
   }
 
@@ -64,13 +65,14 @@ export default async function handler(req, res) {
       created_at: r.fields.created_at,
       close_date: r.fields.close_date,
       response_count: r.fields.response_count || 0,
+      survey_password: r.fields.survey_password || null,
     }))});
   }
 
   // POST /api/engagements — admin, create
   if (req.method === "POST") {
     if (!authCheck(req)) return res.status(401).json({ error: "Unauthorized" });
-    const { company, consultant, close_date } = req.body;
+    const { company, consultant, close_date, survey_password } = req.body;
     if (!company || !consultant) return res.status(400).json({ error: "company and consultant required" });
     const code = genCode(company);
     const fields = {
@@ -81,6 +83,7 @@ export default async function handler(req, res) {
       created_at: new Date().toISOString(),
     };
     if (close_date) fields.close_date = close_date;
+    if (survey_password) fields.survey_password = survey_password;
     const data = await airtable("POST", "", { fields });
     if (data.error) return res.status(500).json({ error: data.error });
     return res.json({ success: true, code, id: data.id });
@@ -89,11 +92,12 @@ export default async function handler(req, res) {
   // PATCH /api/engagements — admin, update status or close_date
   if (req.method === "PATCH") {
     if (!authCheck(req)) return res.status(401).json({ error: "Unauthorized" });
-    const { id, status, close_date } = req.body;
+    const { id, status, close_date, survey_password } = req.body;
     if (!id) return res.status(400).json({ error: "id required" });
     const fields = {};
     if (status) fields.status = status;
     if (close_date !== undefined) fields.close_date = close_date;
+    if (survey_password !== undefined) fields.survey_password = survey_password;
     const data = await airtable("PATCH", `/${id}`, { fields });
     if (data.error) return res.status(500).json({ error: data.error });
     return res.json({ success: true });
