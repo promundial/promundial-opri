@@ -1461,7 +1461,7 @@ function AdminPanel({ password, onExit }) {
   const [engagements, setEngagements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ company: "", consultant: "", close_date: "" });
+  const [form, setForm] = useState({ company: "", consultant: "", close_date: "", survey_password: "" });
   const [savingNew, setSavingNew] = useState(false);
   const [selectedEng, setSelectedEng] = useState(null);
   const [engResponses, setEngResponses] = useState([]);
@@ -1478,7 +1478,7 @@ function AdminPanel({ password, onExit }) {
   async function handleCreate() {
     if (!form.company || !form.consultant) return;
     setSavingNew(true);
-    const result = await apiCreateEngagement(password, { company: form.company, consultant: form.consultant, close_date: form.close_date || undefined });
+    const result = await apiCreateEngagement(password, { company: form.company, consultant: form.consultant, close_date: form.close_date, survey_password: form.survey_password || undefined });
     if (result.success) { setForm({ company: "", consultant: "", close_date: "" }); setCreating(false); await reload(); }
     setSavingNew(false);
   }
@@ -1562,12 +1562,19 @@ function AdminPanel({ password, onExit }) {
                 <input value={form.consultant} onChange={function(e) { setForm(function(p) { return Object.assign({}, p, { consultant: e.target.value }); }); }} placeholder="Ej. José Ricardo" style={s.input} />
               </div>
             </div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={s.label}>Fecha de cierre (opcional)</label>
-              <input type="date" value={form.close_date} onChange={function(e) { setForm(function(p) { return Object.assign({}, p, { close_date: e.target.value }); }); }} style={s.input} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={s.label}>Fecha de cierre (opcional)</label>
+                <input type="date" value={form.close_date} onChange={function(e) { setForm(function(p) { return Object.assign({}, p, { close_date: e.target.value }); }); }} style={s.input} />
+              </div>
+              <div>
+                <label style={s.label}>Contraseña encuestados *</label>
+                <input value={form.survey_password} onChange={function(e) { setForm(function(p) { return Object.assign({}, p, { survey_password: e.target.value }); }); }} placeholder="Ej. empresa2026" style={s.input} />
+                <div style={{ fontSize: 10, color: MUTED, marginTop: 3 }}>Comparte esta clave solo con los participantes</div>
+              </div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={handleCreate} disabled={!form.company || !form.consultant || savingNew} style={btn(GREEN, !form.company || !form.consultant || savingNew)}>{savingNew ? "Creando…" : "Crear engagement"}</button>
+              <button onClick={handleCreate} disabled={!form.company || !form.consultant || !form.survey_password || savingNew} style={btn(GREEN, !form.company || !form.consultant || !form.survey_password || savingNew)}>{savingNew ? "Creando…" : "Crear engagement"}</button>
               <button onClick={function() { setCreating(false); }} style={btn(MUTED, false)}>Cancelar</button>
             </div>
           </div>
@@ -1632,7 +1639,7 @@ function EngCard({ eng, onClose, onReopen, onResults, closed, password, onReload
             <span style={{ fontSize: 9, background: closed ? MUTED + "18" : GREEN + "18", color: closed ? MUTED : GREEN, padding: "2px 7px", borderRadius: 99, fontWeight: 700, textTransform: "uppercase" }}>{closed ? "Cerrado" : isExpired ? "Expirado" : "Activo"}</span>
           </div>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 6 }}>
-            Consultor: {eng.consultant} · Código: <span style={{ fontFamily: "monospace", color: CHARCOAL }}>{eng.code}</span> · {eng.response_count || 0} respuestas
+            Consultor: {eng.consultant} · Código: <span style={{ fontFamily: "monospace", color: CHARCOAL }}>{eng.code}</span> · {eng.response_count || 0} respuestas{eng.survey_password ? <span style={{ marginLeft: 6, color: MUTED_LT }}>· Clave: <span style={{ fontFamily: "monospace", color: CHARCOAL }}>{eng.survey_password}</span></span> : null}
           </div>
           {!closed && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1655,11 +1662,12 @@ function EngCard({ eng, onClose, onReopen, onResults, closed, password, onReload
 
 
 // ── Respondent Login ───────────────────────────────────────────────────────────
-function RespondentLogin({ company, onAuth }) {
+function RespondentLogin({ company, surveyPassword, onAuth }) {
   const [pw, setPw] = useState("");
   const [error, setError] = useState(false);
   function attempt() {
-    if (pw === RESPONDENT_PASS) { onAuth(); }
+    const correct = surveyPassword || RESPONDENT_PASS; // fallback to global if not set
+    if (pw === correct) { onAuth(); }
     else { setError(true); setTimeout(function() { setError(false); }, 1800); setPw(""); }
   }
   function handleKey(e) { if (e.key === "Enter") attempt(); }
@@ -1763,7 +1771,7 @@ function EngagementSurveyPage({ code }) {
   if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 16 }}><div style={{ textAlign: "center", color: MUTED }}><div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 24, color: GREEN, marginBottom: 6 }}>OPRI™</div><div>Cargando…</div></div></div>;
 
   if (!authenticated && engagement && engagement.status === "active") {
-    return <RespondentLogin company={engagement.company} onAuth={function() { setAuthenticated(true); }} />;
+    return <RespondentLogin company={engagement.company} surveyPassword={engagement.survey_password} onAuth={function() { setAuthenticated(true); }} />;
   }
 
   if (!engagement) return (
