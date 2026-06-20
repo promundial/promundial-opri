@@ -48,14 +48,14 @@ function avg(arr) {
 
 // ── Question data ─────────────────────────────────────────────────────────────
 const CORE_DIMS = [
-  { id: "alignment", short: "Alignment", label: "Strategic Alignment", weight: 0.20, color: BLUE, questions: [
+  { id: "alignment", short: "Alineación", label: "Strategic Alignment", weight: 0.20, color: BLUE, questions: [
     { id: "A1", text: "Entiendo claramente cuáles son las prioridades más importantes de la organización." },
     { id: "A2", text: "Las prioridades organizacionales se comunican de manera consistente." },
     { id: "A3", text: "Mi trabajo contribuye claramente a los objetivos de la organización." },
     { id: "A4", text: "Las diferentes áreas trabajan alineadas hacia objetivos comunes." },
     { id: "A5", text: "La organización evita dispersarse en demasiadas iniciativas simultáneas." },
   ]},
-  { id: "execution", short: "Execution", label: "Execution Excellence", weight: 0.30, color: GREEN, questions: [
+  { id: "execution", short: "Ejecución", label: "Execution Excellence", weight: 0.30, color: GREEN, questions: [
     { id: "E1", text: "Existe claridad sobre quién es responsable de cada resultado importante." },
     { id: "E2", text: "Los compromisos asumidos suelen cumplirse." },
     { id: "E3", text: "Los problemas se resuelven oportunamente." },
@@ -64,7 +64,7 @@ const CORE_DIMS = [
     { id: "E6", text: "Los mismos problemas rara vez se repiten una y otra vez." },
     { id: "E7", text: "La organización mantiene el enfoque hasta completar las iniciativas importantes." },
   ]},
-  { id: "leadership", short: "Leadership", label: "Leadership & Collective Effectiveness", weight: 0.25, color: VIOLET, questions: [
+  { id: "leadership", short: "Liderazgo", label: "Leadership & Collective Effectiveness", weight: 0.25, color: VIOLET, questions: [
     { id: "L1", text: "Los líderes de la organización actúan como un equipo." },
     { id: "L2", text: "Existe confianza entre los líderes de la organización." },
     { id: "L3", text: "Las decisiones importantes consideran diferentes puntos de vista antes de ser tomadas." },
@@ -72,13 +72,13 @@ const CORE_DIMS = [
     { id: "L5", text: "Los líderes comunican mensajes consistentes." },
     { id: "L6", text: "Los líderes modelan los comportamientos que esperan de los demás." },
   ]},
-  { id: "resilience", short: "Resilience", label: "Change & Resilience Capability", weight: 0.15, color: AMBER, questions: [
+  { id: "resilience", short: "Resiliencia", label: "Change & Resilience Capability", weight: 0.15, color: AMBER, questions: [
     { id: "R1", text: "La organización se adapta rápidamente cuando cambian las circunstancias." },
     { id: "R2", text: "Las personas están abiertas a cuestionar formas tradicionales de trabajar." },
     { id: "R3", text: "La organización aprende de sus errores y experiencias." },
     { id: "R4", text: "Los cambios importantes suelen sostenerse en el tiempo." },
   ]},
-  { id: "culture", short: "Culture", label: "Organizational Health & Culture", weight: 0.10, color: TEAL, questions: [
+  { id: "culture", short: "Cultura", label: "Organizational Health & Culture", weight: 0.10, color: TEAL, questions: [
     { id: "C1", text: "Existe colaboración efectiva entre áreas y equipos." },
     { id: "C2", text: "Las personas se sienten empoderadas para actuar y tomar decisiones dentro de su ámbito de responsabilidad." },
     { id: "C3", text: "Las personas se sienten responsables por el éxito colectivo de la organización." },
