@@ -233,7 +233,7 @@ const DEEP_MODULES = [
     groups: [
       { label: "Claridad de Roles", qs: [
         { id: "EXD1", text: "Existen mecanismos claros para tomar decisiones." },
-        { id: "EXD2", text: "Las responsabilidades están claramente definidas." },
+        { id: "EXD2", text: "Existe claridad sobre quién toma las decisiones en cada proceso crítico." },
         { id: "EXD3", text: "Los problemas críticos tienen dueños identificados." },
       ]},
       { label: "Gestión de Indicadores", qs: [
@@ -267,7 +267,7 @@ const DEEP_MODULES = [
         { id: "EXD21", text: "Los recursos son suficientes para ejecutar las prioridades." },
       ]},
       { label: "Disciplina Operativa", qs: [
-        { id: "EXD22", text: "Las mejoras implementadas se sostienen en el tiempo." },
+        { id: "EXD22", text: "Existen mecanismos de gobernanza que garantizan la sostenibilidad de las mejoras." },
         { id: "EXD23", text: "Los resultados no dependen de esfuerzos extraordinarios." },
         { id: "EXD24", text: "La disciplina operativa es consistente." },
         { id: "EXD25", text: "La organización ejecuta con confiabilidad." },
