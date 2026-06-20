@@ -1710,6 +1710,52 @@ function RespondentLogin({ company, surveyPassword, onAuth }) {
 }
 
 // ── Engagement Survey (public URL /e/:code) ───────────────────────────────────
+// ── Welcome Screen ────────────────────────────────────────────────────────────
+function WelcomeScreen({ company, onStart }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 24 }}>
+      <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');"}</style>
+      <div style={{ background: WHITE, borderRadius: 14, padding: "36px 28px", maxWidth: 480, width: "100%", boxShadow: "0 4px 24px rgba(0,0,0,0.07)", border: "1px solid " + CREAM_DK }}>
+        
+        {/* Header */}
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 13, color: GOLD, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 6 }}>Promundial Consulting Group</div>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 30, color: GREEN, fontWeight: 600, marginBottom: 4 }}>OPRI™</div>
+          <div style={{ fontSize: 11, color: MUTED, textTransform: "uppercase", letterSpacing: "0.1em" }}>Organizational Performance & Resilience Index</div>
+        </div>
+
+        {/* Divider */}
+        <div style={{ height: 1, background: CREAM_DK, marginBottom: 24 }} />
+
+        {/* Content */}
+        <p style={{ fontSize: 14, color: CHARCOAL, lineHeight: 1.8, marginBottom: 16 }}>
+          <strong style={{ color: GREEN }}>{company}</strong> ha decidido implementar el diagnóstico OPRI™ como parte de su proceso de mejora organizacional. Este instrumento permite identificar fortalezas, brechas y oportunidades de desarrollo en las dimensiones clave del desempeño organizacional.
+        </p>
+        <p style={{ fontSize: 14, color: CHARCOAL, lineHeight: 1.8, marginBottom: 16 }}>
+          Sus respuestas son <strong>estrictamente confidenciales</strong>. Los resultados se presentan únicamente de forma agregada — nunca de manera individual. No hay respuestas correctas ni incorrectas; lo que importa es su percepción honesta de la realidad de la organización.
+        </p>
+        <p style={{ fontSize: 14, color: CHARCOAL, lineHeight: 1.8, marginBottom: 28 }}>
+          El cuestionario toma aproximadamente <strong>8 minutos</strong>. Le agradecemos su tiempo y su disposición a contribuir al desarrollo de {company}.
+        </p>
+
+        {/* Divider */}
+        <div style={{ height: 1, background: CREAM_DK, marginBottom: 24 }} />
+
+        <button
+          onClick={onStart}
+          style={{ width: "100%", padding: "13px", borderRadius: 8, background: GREEN, color: WHITE, border: "none", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.03em" }}
+        >
+          Comenzar diagnóstico →
+        </button>
+
+        <div style={{ textAlign: "center", marginTop: 16, fontSize: 10, color: MUTED_LT, letterSpacing: "0.06em" }}>
+          OPRI™ ENTERPRISE EDITION · PROMUNDIAL CONSULTING GROUP
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EngagementSurveyPage({ code }) {
   const [engagement, setEngagement] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1717,6 +1763,7 @@ function EngagementSurveyPage({ code }) {
   const [responses, setResponses] = useState([]);
   const [savedMeta, setSavedMeta] = useState(null); // persists meta across levels
   const [authenticated, setAuthenticated] = useState(false); // respondent login
+  const [welcomed, setWelcomed] = useState(false); // welcome screen shown
   // completedSurveys is keyed by engagement code so different engagements don't bleed
   var SESSION_KEY = "opri_session_" + code;
   function loadSession() { try { var v = sessionStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : { done: [], progress: {} }; } catch(e) { return { done: [], progress: {} }; } }
@@ -1772,6 +1819,10 @@ function EngagementSurveyPage({ code }) {
 
   if (!authenticated && engagement && engagement.status === "active") {
     return <RespondentLogin company={engagement.company} surveyPassword={engagement.survey_password} onAuth={function() { setAuthenticated(true); }} />;
+  }
+
+  if (authenticated && !welcomed && engagement && engagement.status === "active") {
+    return <WelcomeScreen company={engagement.company} onStart={function() { setWelcomed(true); }} />;
   }
 
   if (!engagement) return (
