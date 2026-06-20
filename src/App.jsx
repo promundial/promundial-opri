@@ -1734,8 +1734,36 @@ function WelcomeScreen({ company, onStart }) {
         <p style={{ fontSize: 14, color: CHARCOAL, lineHeight: 1.8, marginBottom: 16 }}>
           Sus respuestas son <strong>estrictamente confidenciales</strong>. Los resultados se presentan únicamente de forma agregada — nunca de manera individual. No hay respuestas correctas ni incorrectas; lo que importa es su percepción honesta de la realidad de la organización.
         </p>
+        {/* Levels */}
+        <div style={{ background: CREAM, borderRadius: 10, padding: "16px 18px", marginBottom: 24, border: "1px solid " + CREAM_DK }}>
+          <div style={{ fontSize: 11, color: GREEN, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Estructura del diagnóstico</div>
+          {[
+            { level: "Level 1", name: "OPRI Core 25", time: "~8 min", desc: "Diagnóstico base. Lo completan todos los participantes.", color: GREEN, always: true },
+            { level: "Level 2", name: "OPRI Full 60", time: "+10 min", desc: "Se activa si los resultados del Core identifican áreas de atención.", color: GREEN_MID, always: false },
+            { level: "Level 3", name: "Deep Dive", time: "+12 min", desc: "Módulos especializados que se activan según los resultados del Full.", color: VIOLET, always: false },
+          ].map(function(l) {
+            return (
+              <div key={l.level} style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
+                <div style={{ width: 28, height: 28, borderRadius: "50%", background: l.color + "18", border: "2px solid " + l.color + "55", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: l.color }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: l.color }}>{l.name}</span>
+                    <span style={{ fontSize: 9, color: l.color, background: l.color + "14", padding: "1px 7px", borderRadius: 99, fontWeight: 600 }}>{l.time}</span>
+                    {l.always && <span style={{ fontSize: 9, color: GREEN, background: GREEN + "14", padding: "1px 7px", borderRadius: 99, fontWeight: 600 }}>Todos</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>{l.desc}</div>
+                </div>
+              </div>
+            );
+          })}
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid " + CREAM_DK, fontSize: 12, color: MUTED }}>
+            Tiempo total estimado: <strong style={{ color: CHARCOAL }}>entre 8 y 30 minutos</strong>, según los niveles que se activen para usted.
+          </div>
+        </div>
         <p style={{ fontSize: 14, color: CHARCOAL, lineHeight: 1.8, marginBottom: 28 }}>
-          El cuestionario toma aproximadamente <strong>8 minutos</strong>. Le agradecemos su tiempo y su disposición a contribuir al desarrollo de {company}.
+          Le agradecemos su tiempo y su disposición a contribuir al desarrollo de {company}.
         </p>
 
         {/* Divider */}
