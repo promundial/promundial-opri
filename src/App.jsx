@@ -2031,28 +2031,38 @@ const DIM_META = {
 // ── Gauge SVG ─────────────────────────────────────────────────────────────────
 function gaugeHTML(score, color, size) {
   size = size || 120;
-  var sw = size * 0.08;          // stroke width
-  var r = size * 0.40;           // radius
-  var cx = size / 2;             // horizontal center
-  var cy = r + sw * 0.6;         // vertical center = radius + half-stroke padding from top
-  var w = size;
-  var h = cy + sw * 0.6 + size * 0.22; // height = center + half-stroke below + text
+  var sw = size * 0.09;
+  var r = size * 0.38;
+  var cx = size / 2;
+  var cy = r + sw;               // center Y: radius + stroke padding so top of arc is at y=sw/2
+  var svgW = size;
+  var svgH = cy + size * 0.22;  // below center: space for score text
+
+  // Background arc: full semicircle left→right (clockwise through top)
+  // Start: left point (cx-r, cy), End: right point (cx+r, cy)
+  // Arc path goes UP and over (sweep-flag=1 means clockwise)
+  var bgPath = 'M ' + (cx - r) + ' ' + cy + ' A ' + r + ' ' + r + ' 0 0 1 ' + (cx + r) + ' ' + cy;
+
+  // Score arc: from left point, sweep clockwise by pct fraction of PI
+  // pct=0 → stays at left, pct=1 → reaches right (full semicircle)
   var pct = Math.min(Math.max(score / 5, 0), 1);
-  // Arc goes from left (180°) to right (0°) passing through top (90°)
-  // startAngle = PI (left), endAngle = PI + pct*PI (going clockwise = right through top)
-  var startAngle = Math.PI;
-  var endAngle = Math.PI + pct * Math.PI;
-  var x1 = cx + r * Math.cos(startAngle);
-  var y1 = cy + r * Math.sin(startAngle);
-  var x2 = cx + r * Math.cos(endAngle);
-  var y2 = cy + r * Math.sin(endAngle);
+  // End point of score arc:
+  // angle measured from positive X axis, going counter-clockwise
+  // At left point: angle = PI. Going clockwise means angle decreases.
+  // end angle = PI - pct*PI = PI*(1-pct)
+  var endAngle = Math.PI * (1 - pct);
+  var ex = cx + r * Math.cos(endAngle);
+  var ey = cy - r * Math.sin(endAngle); // subtract because SVG y-axis is inverted
   var largeArc = pct > 0.5 ? 1 : 0;
+  var scorePath = 'M ' + (cx - r).toFixed(2) + ' ' + cy.toFixed(2) +
+    ' A ' + r + ' ' + r + ' 0 ' + largeArc + ' 1 ' + ex.toFixed(2) + ' ' + ey.toFixed(2);
+
   return (
-    '<svg width="' + w + '" height="' + h.toFixed(1) + '" viewBox="0 0 ' + w + ' ' + h.toFixed(1) + '">' +
-    '<path d="M ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A ' + r + ' ' + r + ' 0 0 1 ' + (cx+r).toFixed(2) + ' ' + cy.toFixed(2) + '" fill="none" stroke="#E5E7EB" stroke-width="' + sw + '" stroke-linecap="round"/>' +
-    (score > 0 ? '<path d="M ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A ' + r + ' ' + r + ' 0 ' + largeArc + ' 1 ' + x2.toFixed(2) + ' ' + y2.toFixed(2) + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '" stroke-linecap="round"/>' : '') +
-    '<text x="' + cx + '" y="' + (cy + size*0.08).toFixed(1) + '" text-anchor="middle" font-size="' + (size*0.20) + '" font-weight="700" fill="' + color + '" font-family="Georgia,serif">' + score.toFixed(2) + '</text>' +
-    '<text x="' + cx + '" y="' + (cy + size*0.18).toFixed(1) + '" text-anchor="middle" font-size="' + (size*0.085) + '" fill="#6B7280" font-family="sans-serif">/ 5.00</text>' +
+    '<svg width="' + svgW + '" height="' + svgH.toFixed(1) + '" viewBox="0 0 ' + svgW + ' ' + svgH.toFixed(1) + '">' +
+    '<path d="' + bgPath + '" fill="none" stroke="#E5E7EB" stroke-width="' + sw + '" stroke-linecap="round"/>' +
+    (pct > 0 ? '<path d="' + scorePath + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '" stroke-linecap="round"/>' : '') +
+    '<text x="' + cx + '" y="' + (cy + size*0.10).toFixed(1) + '" text-anchor="middle" font-size="' + (size*0.21) + '" font-weight="700" fill="' + color + '" font-family="Georgia,serif">' + score.toFixed(2) + '</text>' +
+    '<text x="' + cx + '" y="' + (cy + size*0.19).toFixed(1) + '" text-anchor="middle" font-size="' + (size*0.086) + '" fill="#6B7280" font-family="sans-serif">/ 5.00</text>' +
     '</svg>'
   );
 }
