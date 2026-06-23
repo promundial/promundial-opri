@@ -2031,29 +2031,32 @@ const DIM_META = {
 // ── Gauge SVG ─────────────────────────────────────────────────────────────────
 function gaugeHTML(score, color, size) {
   size = size || 120;
-  const sw = size * 0.09; // stroke width
-  const r = size * 0.36;  // radius — slightly smaller to fit with stroke
-  const cx = size / 2;
-  const cy = size * 0.62; // center lower so top of arc has room
-  const h = r + sw + size * 0.04; // height = radius + half-stroke + small padding
-  const totalH = cy - (cy - r - sw) + size * 0.18; // viewBox height
-  const viewH = r + sw * 1.5 + size * 0.22; // enough for arc top + score text below
-  const pct = Math.min(score / 5, 1);
-  const startAngle = Math.PI;
-  const endAngle = startAngle + pct * Math.PI;
-  const x1 = cx + r * Math.cos(startAngle);
-  const y1 = cy + r * Math.sin(startAngle);
-  const x2 = cx + r * Math.cos(endAngle);
-  const y2 = cy + r * Math.sin(endAngle);
-  const largeArc = pct > 0.5 ? 1 : 0;
-  const svgH = cy + size * 0.16; // total svg height: center + space for text below
-  return '<svg width="' + size + '" height="' + svgH.toFixed(0) + '" viewBox="0 0 ' + size + ' ' + svgH.toFixed(0) + '">' +
-    '<path d="M ' + (cx - r) + ' ' + cy + ' A ' + r + ' ' + r + ' 0 0 1 ' + (cx + r) + ' ' + cy + '" fill="none" stroke="#E5E7EB" stroke-width="' + sw + '" stroke-linecap="round"/>' +
+  var sw = size * 0.08;          // stroke width
+  var r = size * 0.40;           // radius
+  var cx = size / 2;             // horizontal center
+  var cy = r + sw * 0.6;         // vertical center = radius + half-stroke padding from top
+  var w = size;
+  var h = cy + sw * 0.6 + size * 0.22; // height = center + half-stroke below + text
+  var pct = Math.min(Math.max(score / 5, 0), 1);
+  // Arc goes from left (180°) to right (0°) passing through top (90°)
+  // startAngle = PI (left), endAngle = PI + pct*PI (going clockwise = right through top)
+  var startAngle = Math.PI;
+  var endAngle = Math.PI + pct * Math.PI;
+  var x1 = cx + r * Math.cos(startAngle);
+  var y1 = cy + r * Math.sin(startAngle);
+  var x2 = cx + r * Math.cos(endAngle);
+  var y2 = cy + r * Math.sin(endAngle);
+  var largeArc = pct > 0.5 ? 1 : 0;
+  return (
+    '<svg width="' + w + '" height="' + h.toFixed(1) + '" viewBox="0 0 ' + w + ' ' + h.toFixed(1) + '">' +
+    '<path d="M ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A ' + r + ' ' + r + ' 0 0 1 ' + (cx+r).toFixed(2) + ' ' + cy.toFixed(2) + '" fill="none" stroke="#E5E7EB" stroke-width="' + sw + '" stroke-linecap="round"/>' +
     (score > 0 ? '<path d="M ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A ' + r + ' ' + r + ' 0 ' + largeArc + ' 1 ' + x2.toFixed(2) + ' ' + y2.toFixed(2) + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '" stroke-linecap="round"/>' : '') +
-    '<text x="' + cx + '" y="' + (cy + size*0.05).toFixed(0) + '" text-anchor="middle" font-size="' + (size*0.20) + '" font-weight="700" fill="' + color + '" font-family="Georgia,serif">' + score.toFixed(2) + '</text>' +
-    '<text x="' + cx + '" y="' + (cy + size*0.14).toFixed(0) + '" text-anchor="middle" font-size="' + (size*0.085) + '" fill="' + MUTED + '" font-family="sans-serif">/ 5.00</text>' +
-    '</svg>';
+    '<text x="' + cx + '" y="' + (cy + size*0.08).toFixed(1) + '" text-anchor="middle" font-size="' + (size*0.20) + '" font-weight="700" fill="' + color + '" font-family="Georgia,serif">' + score.toFixed(2) + '</text>' +
+    '<text x="' + cx + '" y="' + (cy + size*0.18).toFixed(1) + '" text-anchor="middle" font-size="' + (size*0.085) + '" fill="#6B7280" font-family="sans-serif">/ 5.00</text>' +
+    '</svg>'
+  );
 }
+
 
 // ── Bar chart ─────────────────────────────────────────────────────────────────
 function barHTML(dims, scores) {
