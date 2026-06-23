@@ -2031,9 +2031,13 @@ const DIM_META = {
 // ── Gauge SVG ─────────────────────────────────────────────────────────────────
 function gaugeHTML(score, color, size) {
   size = size || 120;
-  const r = size * 0.38;
+  const sw = size * 0.09; // stroke width
+  const r = size * 0.36;  // radius — slightly smaller to fit with stroke
   const cx = size / 2;
-  const cy = size * 0.58;
+  const cy = size * 0.62; // center lower so top of arc has room
+  const h = r + sw + size * 0.04; // height = radius + half-stroke + small padding
+  const totalH = cy - (cy - r - sw) + size * 0.18; // viewBox height
+  const viewH = r + sw * 1.5 + size * 0.22; // enough for arc top + score text below
   const pct = Math.min(score / 5, 1);
   const startAngle = Math.PI;
   const endAngle = startAngle + pct * Math.PI;
@@ -2042,11 +2046,12 @@ function gaugeHTML(score, color, size) {
   const x2 = cx + r * Math.cos(endAngle);
   const y2 = cy + r * Math.sin(endAngle);
   const largeArc = pct > 0.5 ? 1 : 0;
-  return '<svg width="' + size + '" height="' + (size*0.65) + '" viewBox="0 0 ' + size + ' ' + (size*0.65) + '">' +
-    '<path d="M ' + (cx - r) + ' ' + cy + ' A ' + r + ' ' + r + ' 0 0 1 ' + (cx + r) + ' ' + cy + '" fill="none" stroke="#E5E7EB" stroke-width="' + (size*0.09) + '" stroke-linecap="round"/>' +
-    (score > 0 ? '<path d="M ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + largeArc + ' 1 ' + x2 + ' ' + y2 + '" fill="none" stroke="' + color + '" stroke-width="' + (size*0.09) + '" stroke-linecap="round"/>' : '') +
-    '<text x="' + cx + '" y="' + (cy - size*0.02) + '" text-anchor="middle" font-size="' + (size*0.22) + '" font-weight="700" fill="' + color + '" font-family="Georgia,serif">' + score.toFixed(2) + '</text>' +
-    '<text x="' + cx + '" y="' + (cy + size*0.12) + '" text-anchor="middle" font-size="' + (size*0.09) + '" fill="' + MUTED + '" font-family="sans-serif">/ 5.00</text>' +
+  const svgH = cy + size * 0.16; // total svg height: center + space for text below
+  return '<svg width="' + size + '" height="' + svgH.toFixed(0) + '" viewBox="0 0 ' + size + ' ' + svgH.toFixed(0) + '">' +
+    '<path d="M ' + (cx - r) + ' ' + cy + ' A ' + r + ' ' + r + ' 0 0 1 ' + (cx + r) + ' ' + cy + '" fill="none" stroke="#E5E7EB" stroke-width="' + sw + '" stroke-linecap="round"/>' +
+    (score > 0 ? '<path d="M ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' A ' + r + ' ' + r + ' 0 ' + largeArc + ' 1 ' + x2.toFixed(2) + ' ' + y2.toFixed(2) + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '" stroke-linecap="round"/>' : '') +
+    '<text x="' + cx + '" y="' + (cy + size*0.05).toFixed(0) + '" text-anchor="middle" font-size="' + (size*0.20) + '" font-weight="700" fill="' + color + '" font-family="Georgia,serif">' + score.toFixed(2) + '</text>' +
+    '<text x="' + cx + '" y="' + (cy + size*0.14).toFixed(0) + '" text-anchor="middle" font-size="' + (size*0.085) + '" fill="' + MUTED + '" font-family="sans-serif">/ 5.00</text>' +
     '</svg>';
 }
 
