@@ -2034,36 +2034,46 @@ function gaugeHTML(score, color, size) {
   var sw = size * 0.09;
   var r = size * 0.38;
   var cx = size / 2;
-  var cy = r + sw;               // center Y: radius + stroke padding so top of arc is at y=sw/2
+  var cy = r + sw;
   var svgW = size;
-  var svgH = cy + size * 0.22;  // below center: space for score text
-
-  // Background arc: full semicircle left→right (clockwise through top)
-  // Start: left point (cx-r, cy), End: right point (cx+r, cy)
-  // Arc path goes UP and over (sweep-flag=1 means clockwise)
-  var bgPath = 'M ' + (cx - r) + ' ' + cy + ' A ' + r + ' ' + r + ' 0 0 1 ' + (cx + r) + ' ' + cy;
-
-  // Score arc: from left point, sweep clockwise by pct fraction of PI
-  // pct=0 → stays at left, pct=1 → reaches right (full semicircle)
+  var svgH = cy + size * 0.22;
   var pct = Math.min(Math.max(score / 5, 0), 1);
-  // End point of score arc:
-  // angle measured from positive X axis, going counter-clockwise
-  // At left point: angle = PI. Going clockwise means angle decreases.
-  // end angle = PI - pct*PI = PI*(1-pct)
+
+  // Key points
+  var lx = (cx - r).toFixed(2), ly = cy.toFixed(2);  // left
+  var tx = cx.toFixed(2), ty = (cy - r).toFixed(2);  // top
+  var rx2 = (cx + r).toFixed(2), ry = cy.toFixed(2); // right
+
+  // End point of score arc
   var endAngle = Math.PI * (1 - pct);
-  var ex = cx + r * Math.cos(endAngle);
-  var ey = cy - r * Math.sin(endAngle); // subtract because SVG y-axis is inverted
-  var largeArc = pct > 0.5 ? 1 : 0;
-  var scorePath = 'M ' + (cx - r).toFixed(2) + ' ' + cy.toFixed(2) +
-    ' A ' + r + ' ' + r + ' 0 ' + largeArc + ' 1 ' + ex.toFixed(2) + ' ' + ey.toFixed(2);
+  var ex = (cx + r * Math.cos(endAngle)).toFixed(2);
+  var ey = (cy - r * Math.sin(endAngle)).toFixed(2);
+
+  // Background: full semicircle left→top→right (one arc, sweep=1)
+  var bg = "<path d=\"M " + lx + " " + ly + " A " + r + " " + r + " 0 0 1 " + rx2 + " " + ry + "\" fill=\"none\" stroke=\"#E5E7EB\" stroke-width=\"" + sw + "\" stroke-linecap=\"round\"/>";
+
+  // Score arc: always two segments via top point
+  // Seg1: left → top (always, if pct > 0)
+  // Seg2: top → endpoint (only if pct > 0.5)
+  var scoreArcs = "";
+  if (pct > 0) {
+    if (pct <= 0.5) {
+      // Single small arc: left → endpoint (sweep=1)
+      scoreArcs = "<path d=\"M " + lx + " " + ly + " A " + r + " " + r + " 0 0 1 " + ex + " " + ey + "\" fill=\"none\" stroke=\"" + color + "\" stroke-width=\"" + sw + "\" stroke-linecap=\"round\"/>";
+    } else {
+      // Two arcs via top
+      scoreArcs =
+        "<path d=\"M " + lx + " " + ly + " A " + r + " " + r + " 0 0 1 " + tx + " " + ty + "\" fill=\"none\" stroke=\"" + color + "\" stroke-width=\"" + sw + "\" stroke-linecap=\"round\"/>" +
+        "<path d=\"M " + tx + " " + ty + " A " + r + " " + r + " 0 0 1 " + ex + " " + ey + "\" fill=\"none\" stroke=\"" + color + "\" stroke-width=\"" + sw + "\" stroke-linecap=\"round\"/>";
+    }
+  }
 
   return (
-    '<svg width="' + svgW + '" height="' + svgH.toFixed(1) + '" viewBox="0 0 ' + svgW + ' ' + svgH.toFixed(1) + '">' +
-    '<path d="' + bgPath + '" fill="none" stroke="#E5E7EB" stroke-width="' + sw + '" stroke-linecap="round"/>' +
-    (pct > 0 ? '<path d="' + scorePath + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '" stroke-linecap="round"/>' : '') +
-    '<text x="' + cx + '" y="' + (cy + size*0.10).toFixed(1) + '" text-anchor="middle" font-size="' + (size*0.21) + '" font-weight="700" fill="' + color + '" font-family="Georgia,serif">' + score.toFixed(2) + '</text>' +
-    '<text x="' + cx + '" y="' + (cy + size*0.19).toFixed(1) + '" text-anchor="middle" font-size="' + (size*0.086) + '" fill="#6B7280" font-family="sans-serif">/ 5.00</text>' +
-    '</svg>'
+    "<svg width=\"" + svgW + "\" height=\"" + svgH.toFixed(1) + "\" viewBox=\"0 0 " + svgW + " " + svgH.toFixed(1) + "\">" +
+    bg + scoreArcs +
+    "<text x=\"" + cx + "\" y=\"" + (cy + size*0.10).toFixed(1) + "\" text-anchor=\"middle\" font-size=\"" + (size*0.21) + "\" font-weight=\"700\" fill=\"" + color + "\" font-family=\"Georgia,serif\">" + score.toFixed(2) + "</text>" +
+    "<text x=\"" + cx + "\" y=\"" + (cy + size*0.19).toFixed(1) + "\" text-anchor=\"middle\" font-size=\"" + (size*0.086) + "\" fill=\"#6B7280\" font-family=\"sans-serif\">/ 5.00</text>" +
+    "</svg>"
   );
 }
 
