@@ -1820,6 +1820,30 @@ function EngagementSurveyPage({ code }) {
       if (eng && eng.status === "active") {
         const data = await loadResponses(code);
         setResponses(data);
+
+        // Restore completedSurveys from Airtable if sessionStorage is empty
+        // Match by respondent meta saved in sessionStorage
+        var s = loadSession();
+        if (s.done.length === 0 && data.length > 0) {
+          var savedMeta = loadSavedMeta();
+          if (savedMeta && savedMeta.company) {
+            // Find responses from this respondent by matching name+level+area
+            var myResponses = data.filter(function(r) {
+              if (!r.meta) return false;
+              var nameMatch = !savedMeta.name || !r.meta.name || r.meta.name === savedMeta.name;
+              var levelMatch = r.meta.level === savedMeta.level;
+              var areaMatch = r.meta.area === savedMeta.area;
+              return levelMatch && areaMatch && nameMatch;
+            });
+            if (myResponses.length > 0) {
+              myResponses.forEach(function(r) {
+                if (s.done.indexOf(r.survey) < 0) s.done.push(r.survey);
+              });
+              saveSession(s);
+              setSession(Object.assign({}, s));
+            }
+          }
+        }
       }
       setLoading(false);
     }
