@@ -1276,7 +1276,11 @@ function ResultsPanel({ responses, coreScores, fullScores, l2, l3, activeMods, h
   const fFullScores = computeOPRI(fFullRR, FULL_DIMS);
   const fL2 = checkL2(fCoreScores);
   const fL3 = checkL3(fFullScores);
-  const fActiveMods = DEEP_MODULES.filter(function(m) { return fL3.mods.indexOf(m.id) >= 0; });
+  // Show Deep Dive tabs for any module that has responses OR is triggered by scores
+  const fActiveMods = DEEP_MODULES.filter(function(m) {
+    var hasResponses = filteredResponses.some(function(r) { return r.survey === "deep_" + m.id; });
+    return hasResponses || fL3.mods.indexOf(m.id) >= 0;
+  });
 
   const tabs = [
     { id: "core_opri", label: "Core OPRI", sub: "L1" },
@@ -1508,7 +1512,10 @@ function AdminPanel({ password, onExit }) {
     const fullScores = computeOPRI(fullRR, FULL_DIMS);
     const l2 = checkL2(coreScores);
     const l3 = checkL3(fullScores);
-    const activeMods = DEEP_MODULES.filter(function(m) { return l3.mods.indexOf(m.id) >= 0; });
+    const activeMods = DEEP_MODULES.filter(function(m) {
+      var hasResponses = engResponses.some(function(r) { return r.survey === "deep_" + m.id; });
+      return hasResponses || l3.mods.indexOf(m.id) >= 0;
+    });
     return (
       <div style={{ fontFamily: "'Jost', sans-serif", background: CREAM, minHeight: "100vh" }}>
         <style>{"@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap');*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{overflow-x:hidden;width:100%;max-width:100vw}body{overflow-x:hidden}.rg-1col{display:grid;grid-template-columns:1fr}.rg-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.rg-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}.rg-auto1fr{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start}@media(max-width:600px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}.rg-auto1fr{grid-template-columns:1fr!important}.hide-mobile{display:none!important}.px-mobile{padding-left:12px!important;padding-right:12px!important}.text-sm-mobile{font-size:11px!important}.flex-col-mobile{flex-direction:column!important;align-items:flex-start!important}.w-full-mobile{width:100%!important}.gap-mobile{gap:8px!important}}@media(max-width:400px){.rg-2col{grid-template-columns:1fr!important}.rg-3col{grid-template-columns:1fr!important}}"}</style>
@@ -1904,7 +1911,10 @@ function EngagementSurveyPage({ code }) {
   const fullScores = computeOPRI(fullRR, FULL_DIMS);
   const l2 = checkL2(coreScores);
   const l3 = checkL3(fullScores);
-  const activeMods = DEEP_MODULES.filter(function(m) { return l3.mods.indexOf(m.id) >= 0; });
+  const activeMods = DEEP_MODULES.filter(function(m) {
+    var hasResponses = responses.some(function(r) { return r.survey === "deep_" + m.id; });
+    return hasResponses || l3.mods.indexOf(m.id) >= 0;
+  });
   const deepCounts = {};
   DEEP_MODULES.forEach(function(m) { deepCounts[m.id] = responses.filter(function(r) { return r.survey === "deep_" + m.id; }).length; });
 
@@ -2575,7 +2585,10 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
   var fullScores = computeOPRI(fullRR, FULL_DIMS);
   var l2 = checkL2(coreScores);
   var l3 = checkL3(fullScores);
-  var activeMods = DEEP_MODULES.filter(function(m) { return l3.mods.indexOf(m.id) >= 0; });
+  var activeMods = DEEP_MODULES.filter(function(m) {
+    var hasResponses = allResponses.some(function(r) { return r.survey === "deep_" + m.id; });
+    return hasResponses || l3.mods.indexOf(m.id) >= 0;
+  });
   var mainScores = fullScores || coreScores;
   var mainDims = fullScores ? FULL_DIMS : CORE_DIMS;
 
@@ -2862,7 +2875,10 @@ function PublicApp() {
   const fullScores = computeOPRI(fullRR, FULL_DIMS);
   const l2 = checkL2(coreScores);
   const l3 = checkL3(fullScores);
-  const activeMods = DEEP_MODULES.filter(function(m) { return l3.mods.indexOf(m.id) >= 0; });
+  const activeMods = DEEP_MODULES.filter(function(m) {
+    var hasResponses = responses.some(function(r) { return r.survey === "deep_" + m.id; });
+    return hasResponses || l3.mods.indexOf(m.id) >= 0;
+  });
   const deepCounts = {};
   DEEP_MODULES.forEach(function(m) { deepCounts[m.id] = responses.filter(function(r) { return r.survey === "deep_" + m.id; }).length; });
 
