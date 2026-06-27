@@ -1240,6 +1240,142 @@ function RespondenteTable({ responses, dims }) {
   );
 }
 
+
+// ── Consistency View — Core vs Full-Extra per person ─────────────────────────
+function ConsistencyView({ responses }) {
+  const coreRR = responses.filter(function(r) { return r.survey === "core"; });
+  const fullRR = responses.filter(function(r) { return r.survey === "full"; });
+
+  if (coreRR.length === 0 || fullRR.length === 0) {
+    return <div style={{ padding: 40, textAlign: "center", color: MUTED_LT }}>Se requieren respuestas de Core y Full para calcular la consistencia.</div>;
+  }
+
+  // Match respondents by meta key
+  function metaKey(r) {
+    if (!r.meta) return null;
+    return (r.meta.name || "anonimo") + "|" + (r.meta.level || "") + "|" + (r.meta.area || "");
+  }
+
+  // Build pairs: same person in Core and Full
+  const pairs = [];
+  coreRR.forEach(function(cr) {
+    var key = metaKey(cr);
+    if (!key) return;
+    var fr = fullRR.find(function(r) { return metaKey(r) === key; });
+    if (fr) pairs.push({ core: cr, full: fr, key: key, name: (cr.meta && cr.meta.name) || "Anónimo", level: (cr.meta && cr.meta.level) || "—" });
+  });
+
+  if (pairs.length === 0) {
+    return <div style={{ padding: 40, textAlign: "center", color: MUTED_LT }}>No se encontraron respondentes que hayan completado ambos niveles.</div>;
+  }
+
+  function dimAvg(answers, questions) {
+    if (!answers) return null;
+    var vals = questions.map(function(q) { return answers[q.id]; }).filter(function(v) { return v != null; });
+    return vals.length > 0 ? vals.reduce(function(a,b){return a+b;},0) / vals.length : null;
+  }
+
+  // For each pair, compute per-dim scores
+  var rows = pairs.map(function(p) {
+    var dims = CORE_DIMS.map(function(d) {
+      var coreScore = dimAvg(p.core.answers, d.questions);
+      var extraQs = EXTRA_Q[d.id] || [];
+      var extraScore = dimAvg(p.full.answers, extraQs);
+      var diff = (coreScore != null && extraScore != null) ? extraScore - coreScore : null;
+      return { dim: d, coreScore: coreScore, extraScore: extraScore, diff: diff };
+    });
+    return { name: p.name, level: p.level, dims: dims };
+  });
+
+  var THRESHOLD_WARN = 0.5;
+  var THRESHOLD_ALERT = 1.0;
+
+  function diffColor(diff) {
+    if (diff == null) return MUTED_LT;
+    var abs = Math.abs(diff);
+    if (abs >= THRESHOLD_ALERT) return RED;
+    if (abs >= THRESHOLD_WARN) return AMBER;
+    return GREEN_LT;
+  }
+
+  function diffLabel(diff) {
+    if (diff == null) return "—";
+    var sign = diff > 0 ? "+" : "";
+    return sign + diff.toFixed(2);
+  }
+
+  return (
+    <div style={{ padding: "18px 16px", maxWidth: 800, margin: "0 auto" }}>
+      <div style={{ background: WHITE, borderRadius: 10, padding: "14px 16px", marginBottom: 16, border: "1px solid " + CREAM_DK }}>
+        <SectionHeader title="Índice de Consistencia · Core vs Full" />
+        <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.6, marginBottom: 8 }}>
+          Compara el score de cada persona en el Core 25 vs las preguntas adicionales del Full 60 por dimensión.
+          Una diferencia negativa indica que la percepción se vuelve más crítica con preguntas más profundas.
+        </p>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          {[{color: GREEN_LT, label: "Consistente (< 0.5)"}, {color: AMBER, label: "Atención (0.5–1.0)"}, {color: RED, label: "Inconsistencia significativa (> 1.0)"}].map(function(b) {
+            return <div key={b.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <div style={{ width: 10, height: 10, borderRadius: 2, background: b.color }} />
+              <span style={{ fontSize: 10, color: MUTED }}>{b.label}</span>
+            </div>;
+          })}
+        </div>
+      </div>
+
+      {rows.map(function(row) {
+        var hasAlert = row.dims.some(function(d) { return d.diff != null && Math.abs(d.diff) >= THRESHOLD_WARN; });
+        return (
+          <div key={row.name} style={{ background: WHITE, borderRadius: 10, border: "1px solid " + (hasAlert ? AMBER + "55" : CREAM_DK), marginBottom: 12, overflow: "hidden" }}>
+            <div style={{ padding: "10px 16px", background: hasAlert ? GOLD_PALE : CREAM, borderBottom: "1px solid " + CREAM_DK, display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: CHARCOAL }}>{row.name}</span>
+              <span style={{ fontSize: 11, color: MUTED }}>{row.level}</span>
+              {hasAlert && <span style={{ fontSize: 9, color: AMBER, fontWeight: 700, background: AMBER + "22", padding: "1px 7px", borderRadius: 99, textTransform: "uppercase" }}>Revisar</span>}
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 500 }}>
+                <thead>
+                  <tr style={{ background: CREAM }}>
+                    <th style={Object.assign({}, s.th, { textAlign: "left" })}>Dimensión</th>
+                    <th style={s.th}>Core 25</th>
+                    <th style={s.th}>Full adicional</th>
+                    <th style={s.th}>Diferencia</th>
+                    <th style={Object.assign({}, s.th, { textAlign: "left" })}>Interpretación</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {row.dims.map(function(d) {
+                    var dc = diffColor(d.diff);
+                    var abs = d.diff != null ? Math.abs(d.diff) : 0;
+                    var interp = d.diff == null ? "—" :
+                      abs < THRESHOLD_WARN ? "Consistente" :
+                      abs < THRESHOLD_ALERT ? (d.diff < 0 ? "Profundidad revela más debilidad" : "Profundidad revela más fortaleza") :
+                      (d.diff < 0 ? "Inconsistencia crítica — revisar" : "Mejora significativa con profundidad");
+                    return (
+                      <tr key={d.dim.id} style={{ borderTop: "1px solid " + CREAM_DK }}>
+                        <td style={{ padding: "7px 12px", fontSize: 12, color: CHARCOAL }}>{d.dim.short}</td>
+                        <td style={{ padding: "7px 9px", textAlign: "center" }}>
+                          {d.coreScore != null ? <span style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 13, color: getMaturity(d.coreScore).color }}>{d.coreScore.toFixed(2)}</span> : <span style={{ color: MUTED_LT }}>—</span>}
+                        </td>
+                        <td style={{ padding: "7px 9px", textAlign: "center" }}>
+                          {d.extraScore != null ? <span style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 13, color: getMaturity(d.extraScore).color }}>{d.extraScore.toFixed(2)}</span> : <span style={{ color: MUTED_LT }}>—</span>}
+                        </td>
+                        <td style={{ padding: "7px 9px", textAlign: "center" }}>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: dc }}>{diffLabel(d.diff)}</span>
+                        </td>
+                        <td style={{ padding: "7px 9px", fontSize: 11, color: dc }}>{interp}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Results panel with cascade tabs ──────────────────────────────────────────
 function CompanySelector({ responses, selected, onSelect }) {
   const companies = [];
@@ -1289,6 +1425,7 @@ function ResultsPanel({ responses, coreScores, fullScores, l2, l3, activeMods, h
     tabs.push({ id: "full_opri", label: "Full OPRI", sub: "L2" });
     tabs.push({ id: "full_pai",  label: "Full PAI",  sub: "L2" });
     tabs.push({ id: "full_heat", label: "Full Maps", sub: "L2" });
+    tabs.push({ id: "consistency", label: "Consistencia", sub: "L2" });
   }
   fActiveMods.forEach(function(m) { tabs.push({ id: "deep_" + m.id, label: m.index, sub: "L3", mod: m }); });
 
@@ -1301,6 +1438,7 @@ function ResultsPanel({ responses, coreScores, fullScores, l2, l3, activeMods, h
     if (activeTab === "full_opri") return <OPRIDash tag="full" title="OPRI Full 60" dims={FULL_DIMS} responses={filteredResponses} />;
     if (activeTab === "full_pai")  return <PAIDash  tag="full" title="OPRI Full"    dims={FULL_DIMS} responses={filteredResponses} />;
     if (activeTab === "full_heat") return <HeatView tag="full" dims={FULL_DIMS} responses={filteredResponses} />;
+    if (activeTab === "consistency") return <ConsistencyView responses={filteredResponses} />;
     const t = tabs.find(function(t) { return t.id === activeTab; });
     if (t && t.mod) return <DeepDash mod={t.mod} responses={filteredResponses} />;
     return null;
