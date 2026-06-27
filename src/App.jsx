@@ -1284,7 +1284,8 @@ function ResultsPanel({ responses, coreScores, fullScores, l2, l3, activeMods, h
     { id: "core_pai",  label: "Core PAI",  sub: "L1" },
     { id: "core_heat", label: "Core Maps", sub: "L1" },
   ];
-  if (coreScores && l2.active) {
+  const hasFullResponses = filteredResponses.some(function(r) { return r.survey === "full"; });
+  if (hasFullResponses) {
     tabs.push({ id: "full_opri", label: "Full OPRI", sub: "L2" });
     tabs.push({ id: "full_pai",  label: "Full PAI",  sub: "L2" });
     tabs.push({ id: "full_heat", label: "Full Maps", sub: "L2" });
@@ -1352,7 +1353,6 @@ function HomeScreen({ responses, coreScores, fullScores, l2, l3, activeMods, dee
     if (which === "core") return responses.filter(function(r) { return r.survey === "core"; }).length > 0 ? "done" : "pending";
     if (which === "full") {
       if (!coreScores) return "locked";
-      if (!l2.active) return "not_required";
       return responses.filter(function(r) { return r.survey === "full"; }).length > 0 ? "done" : "pending";
     }
     return "pending";
