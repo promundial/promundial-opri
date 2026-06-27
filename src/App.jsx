@@ -111,11 +111,11 @@ const EXTRA_Q = {
   leadership: [
     { id: "LE7",  text: "Los líderes abordan los problemas difíciles en lugar de evitarlos." },
     { id: "LE8",  text: "Las decisiones importantes se toman pensando en el beneficio de la organización." },
-    { id: "LE9",  text: "Los líderes fomentan la colaboración entre áreas." },
+    { id: "LE9",  text: "Los líderes resuelven activamente los conflictos entre áreas en lugar de evitarlos." },
     { id: "LE10", text: "Los líderes solicitan y consideran retroalimentación." },
     { id: "LE11", text: "Existe coherencia entre lo que los líderes dicen y hacen." },
     { id: "LE12", text: "Los líderes desarrollan activamente a las personas de sus equipos." },
-    { id: "LE13", text: "Las fortalezas individuales son aprovechadas de manera efectiva." },
+    { id: "LE13", text: "La organización tiene un proceso claro para identificar y desarrollar futuros líderes." },
     { id: "LE14", text: "Las reuniones de liderazgo generan claridad y dirección." },
     { id: "LE15", text: "Los líderes actúan con una visión compartida del futuro de la organización." },
   ],
@@ -123,13 +123,13 @@ const EXTRA_Q = {
     { id: "RC5", text: "La organización identifica tempranamente cambios relevantes en su entorno." },
     { id: "RC6", text: "Se realizan pruebas piloto antes de implementar cambios importantes." },
     { id: "RC7", text: "Los errores son utilizados como fuente de aprendizaje." },
-    { id: "RC8", text: "Las personas se sienten seguras al proponer nuevas ideas." },
+    { id: "RC8", text: "La organización tiene mecanismos formales para capturar y aplicar lecciones aprendidas." },
     { id: "RC9", text: "La organización responde eficazmente ante situaciones inesperadas." },
   ],
   culture: [
     { id: "OC4", text: "La información importante fluye de manera abierta y transparente." },
-    { id: "OC5", text: "Las personas reciben reconocimiento por contribuciones significativas." },
-    { id: "OC6", text: "Existe un equilibrio adecuado entre resultados y bienestar organizacional." },
+    { id: "OC5", text: "Cuando alguien falla, el entorno permite hablar de ello sin temor a consecuencias." },
+    { id: "OC6", text: "Las personas que no cumplen estándares reciben retroalimentación directa y oportuna." },
   ],
 };
 
