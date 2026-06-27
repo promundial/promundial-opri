@@ -881,14 +881,11 @@ function CascadeSelector({ coreScores, fullScores, deepCounts, onSelect }) {
       {nCore === 0 && (
         <SurveyCard level="Level 2" badge="Bloqueado" label="OPRI Full 60" desc="Requiere OPRI Core primero" color={GREEN_MID} status="locked" lockMsg="Complete el OPRI Core 25 para desbloquear este nivel." />
       )}
-      {nCore > 0 && !l2.active && (
-        <SurveyCard level="Level 2" badge="No requerido" label="OPRI Full 60" desc={"Core " + coreScores.opri.toFixed(2) + " — dentro del umbral"} color={GREEN_MID} status="not_required" lockMsg="Los resultados del Core no activan el Full." />
-      )}
-      {nCore > 0 && l2.active && (
-        <SurveyCard level="Level 2" badge={nFull > 0 ? nFull + " resp." : "Activado"} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status="activated" triggers={l2.reasons.slice(0, 3)} onClick={function() { onSelect({ id: "full" }); }} />
+      {nCore > 0 && (
+        <SurveyCard level="Level 2" badge={nFull > 0 ? nFull + " resp." : "Siguiente paso"} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status="activated" triggers={[]} onClick={function() { onSelect({ id: "full" }); }} />
       )}
 
-      {nFull === 0 && l2.active && (
+      {nFull === 0 && nCore > 0 && (
         <div style={{ padding: "11px 13px", background: CREAM_DK, borderRadius: 8, fontSize: 12, color: MUTED, marginTop: 4 }}>
           Los módulos Deep Dive se calcularán una vez completado el OPRI Full 60.
         </div>
@@ -1746,7 +1743,7 @@ function WelcomeScreen({ company, onStart }) {
           <div style={{ fontSize: 11, color: GREEN, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Estructura del diagnóstico</div>
           {[
             { level: "Level 1", name: "OPRI Core 25", time: "~8 min", desc: "Diagnóstico base. Lo completan todos los participantes.", color: GREEN, always: true },
-            { level: "Level 2", name: "OPRI Full 60", time: "+10 min", desc: "Se activa si los resultados del Core identifican áreas de atención.", color: GREEN_MID, always: false },
+            { level: "Level 2", name: "OPRI Full 60", time: "+10 min", desc: "Lo completan todos los participantes después del Core.", color: GREEN_MID, always: true },
             { level: "Level 3", name: "Deep Dive", time: "+12 min", desc: "Módulos especializados que se activan según los resultados del Full.", color: VIOLET, always: false },
           ].map(function(l) {
             return (
@@ -1931,9 +1928,8 @@ function EngagementSurveyPage({ code }) {
       const myL3 = fullDone ? checkL3(fullScores) : { mods: [], fdd: false, reasons: [] };
       const myActiveMods = DEEP_MODULES.filter(function(m) { return myL3.mods.indexOf(m.id) >= 0; });
 
-      const coreOnly = coreDone && !myL2.active;
       const allDeepDone = myActiveMods.length > 0 && myActiveMods.every(function(m) { return completedSurveys.indexOf("deep_" + m.id) >= 0; });
-      const everythingDone = coreOnly || (coreDone && fullDone && myActiveMods.length === 0) || (coreDone && fullDone && allDeepDone);
+      const everythingDone = coreDone && fullDone && (myActiveMods.length === 0 || allDeepDone);
 
       if (everythingDone) {
         return (
@@ -1963,15 +1959,9 @@ function EngagementSurveyPage({ code }) {
           {/* Level 1 — always visible */}
           <SurveyCard level="Level 1" badge={coreDone ? "✓ Completado" : "Iniciar"} label="OPRI Core 25" desc="Diagnóstico rápido · 25 preguntas · ~8 min" color={GREEN} status={coreDone ? "done" : "available"} onClick={coreDone ? undefined : function() { setActiveSurvey({ id: "core" }); }} />
 
-          {/* Level 2 — only shown after THIS respondent completes Core */}
-          {coreDone && myL2.active && (
-            <SurveyCard level="Level 2" badge={fullDone ? "✓ Completado" : "Activado"} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status={fullDone ? "done" : "activated"} triggers={[]} onClick={fullDone ? undefined : function() { setActiveSurvey({ id: "full" }); }} />
-          )}
-          {coreDone && !myL2.active && (
-            <div style={{ padding: "13px 14px", background: "#DCFCE7", borderRadius: 9, border: "1px solid " + GREEN_LT + "55", marginTop: 8 }}>
-              <div style={{ fontSize: 11, color: GREEN, fontWeight: 700, marginBottom: 2 }}>✓ Diagnóstico Core completo</div>
-              <div style={{ fontSize: 12, color: GREEN_MID }}>Sus resultados han sido registrados. Gracias por participar.</div>
-            </div>
+          {/* Level 2 — always shown after Core */}
+          {coreDone && (
+            <SurveyCard level="Level 2" badge={fullDone ? "✓ Completado" : "Siguiente paso"} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status={fullDone ? "done" : "activated"} triggers={[]} onClick={fullDone ? undefined : function() { setActiveSurvey({ id: "full" }); }} />
           )}
 
           {/* Level 3 — only shown after THIS respondent completes Full */}
