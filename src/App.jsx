@@ -2058,12 +2058,23 @@ function EngagementSurveyPage({ code }) {
       const coreDone = completedSurveys.indexOf("core") >= 0;
       const fullDone = completedSurveys.indexOf("full") >= 0;
 
-      // Use ONLY this respondent's session to determine what to show.
-      // Compute scores from their own submitted responses (stored in Airtable but
-      // we match by session: after coreDone we use aggregate scores to determine
-      // whether Full/Deep are needed — but only show them after this person completed Core).
-      const myL2 = coreDone ? checkL2(coreScores) : { active: false, reasons: [] };
-      const myL3 = fullDone ? checkL3(fullScores) : { mods: [], fdd: false, reasons: [] };
+      // Use ONLY this respondent's OWN scores to determine Deep Dive activation.
+      // If their individual score on any dimension is below threshold, they get Deep Dive
+      // regardless of the group average.
+      var myMeta = loadSavedMeta();
+      var myResponses = myMeta ? responses.filter(function(r) {
+        if (!r.meta) return false;
+        var nameMatch = !myMeta.name || !r.meta.name || r.meta.name === myMeta.name;
+        var levelMatch = r.meta.level === myMeta.level;
+        var areaMatch = r.meta.area === myMeta.area;
+        return levelMatch && areaMatch && nameMatch;
+      }) : [];
+      var myCoreRR = myResponses.filter(function(r) { return r.survey === "core"; });
+      var myFullRR = myResponses.filter(function(r) { return r.survey === "full"; });
+      var myCoreScores = myCoreRR.length > 0 ? computeOPRI(myCoreRR, CORE_DIMS) : coreScores;
+      var myFullScores = myFullRR.length > 0 ? computeOPRI(myFullRR, FULL_DIMS) : fullScores;
+      const myL2 = coreDone ? checkL2(myCoreScores) : { active: false, reasons: [] };
+      const myL3 = fullDone ? checkL3(myFullScores) : { mods: [], fdd: false, reasons: [] };
       const myActiveMods = DEEP_MODULES.filter(function(m) { return myL3.mods.indexOf(m.id) >= 0; });
 
       const allDeepDone = myActiveMods.length > 0 && myActiveMods.every(function(m) { return completedSurveys.indexOf("deep_" + m.id) >= 0; });
