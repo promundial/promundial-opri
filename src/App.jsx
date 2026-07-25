@@ -1761,16 +1761,32 @@ function EngCard({ eng, onClose, onReopen, onResults, closed, password, onReload
   }
 
   async function handleGenerateReport() {
-    // Open window synchronously on click — Safari blocks window.open after async calls
-    var win = window.open("", "_blank");
-    if (!win) { alert("Por favor permite ventanas emergentes para generar el reporte."); return; }
-    win.document.write('<html><body style="font-family:sans-serif;padding:40px;text-align:center;color:#6B7280"><h2 style="color:#1B4332">Generando reporte OPRI™...</h2><p>Consultando inteligencia artificial · Por favor espere</p><div style="font-size:32px;margin-top:20px">⏳</div></body></html>');
     setGeneratingReport(true);
     try {
-      const allResponses = await loadResponses(eng.code);
-      await generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_MODULES, computeOPRI, computeDeep, checkL2, checkL3, win);
+      const resp = await fetch("/api/generate-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          engagement_code: eng.code,
+          company: eng.company,
+          consultant: eng.consultant || "Promundial",
+          close_date: eng.close_date || "",
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || "Error " + resp.status);
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "OPRI_Report_" + (eng.company || "Reporte").replace(/[^a-zA-Z0-9]/g, "_") + ".pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch(e) {
-      win.close();
       alert("Error generando reporte: " + e.message);
     }
     setGeneratingReport(false);
@@ -24829,10 +24845,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     // Print button
     '<div class="no-print" style="background:' + GREEN + ';padding:12px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100">' +
       '<div style="font-family:\'Cormorant Garamond\',serif;font-size:18px;color:white;font-weight:600">OPRI™ Enterprise · Reporte</div>' +
-      '<div style="display:flex;gap:8px">' +
-      '<button onclick="window.print()" style="background:' + GOLD + ';color:' + CHARCOAL + ';border:none;padding:8px 20px;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px">⬇ Descargar PDF</button>' +
-      '<button onclick="window.close()" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);padding:8px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">← Volver</button>' +
-      '</div>' +
+      '<button onclick="window.close()" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);padding:8px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">← Cerrar</button>' +
     '</div>' +
 
     '<div class="page">' +
