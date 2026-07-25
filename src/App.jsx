@@ -1761,11 +1761,16 @@ function EngCard({ eng, onClose, onReopen, onResults, closed, password, onReload
   }
 
   async function handleGenerateReport() {
+    // Open window synchronously on click — Safari blocks window.open after async calls
+    var win = window.open("", "_blank");
+    if (!win) { alert("Por favor permite ventanas emergentes para generar el reporte."); return; }
+    win.document.write('<html><body style="font-family:sans-serif;padding:40px;text-align:center;color:#6B7280"><h2 style="color:#1B4332">Generando reporte OPRI™...</h2><p>Consultando inteligencia artificial · Por favor espere</p><div style="font-size:32px;margin-top:20px">⏳</div></body></html>');
     setGeneratingReport(true);
     try {
       const allResponses = await loadResponses(eng.code);
-      await generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_MODULES, computeOPRI, computeDeep, checkL2, checkL3);
+      await generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_MODULES, computeOPRI, computeDeep, checkL2, checkL3, win);
     } catch(e) {
+      win.close();
       alert("Error generando reporte: " + e.message);
     }
     setGeneratingReport(false);
@@ -24631,7 +24636,7 @@ function getDeepRecs(modId, groupLabel, score) {
 }
 
 
-async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_MODULES, computeOPRI, computeDeep, checkL2, checkL3) {
+async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_MODULES, computeOPRI, computeDeep, checkL2, checkL3, preOpenedWin) {
   var coreRR = allResponses.filter(function(r) { return r.survey === "core"; });
   var fullRR = allResponses.filter(function(r) { return r.survey === "full"; });
   var coreScores = computeOPRI(coreRR, CORE_DIMS);
@@ -24656,8 +24661,10 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
   }).filter(function(x) { return x.score != null; }).sort(function(a, b) { return a.score - b.score; });
 
   // ── Call Claude API for AI interpretations ──
-  var win = window.open("", "_blank");
-  win.document.write('<html><body style="font-family:sans-serif;padding:40px;text-align:center;color:#6B7280"><h2 style="color:#1B4332">Generando reporte OPRI™...</h2><p>Consultando inteligencia artificial · Por favor espere</p><div style="font-size:32px;margin-top:20px">⏳</div></body></html>');
+  var win = preOpenedWin || window.open("", "_blank");
+  if (!preOpenedWin) {
+    win.document.write('<html><body style="font-family:sans-serif;padding:40px;text-align:center;color:#6B7280"><h2 style="color:#1B4332">Generando reporte OPRI™...</h2><p>Consultando inteligencia artificial · Por favor espere</p><div style="font-size:32px;margin-top:20px">⏳</div></body></html>');
+  }
 
   var aiInterpretations = {};
   try {
