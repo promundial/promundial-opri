@@ -24824,7 +24824,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       '.page{max-width:900px;margin:0 auto;padding:0 32px 48px}@media(max-width:600px){.page{padding:0 12px 32px}h2{font-size:20px!important}}' +
       'h2{font-family:"Cormorant Garamond",serif;font-weight:600;margin:0 0 4px 0}' +
       '.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:' + MUTED + ';margin:28px 0 12px 0;padding-bottom:6px;border-bottom:2px solid ' + GOLD + '}' +
-    \' +\n    \'</style></head><body>' +
+    '</style></head><body>' +
 
     // Print button
     '<div class="no-print" style="background:' + GREEN + ';padding:12px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100">' +
