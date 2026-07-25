@@ -24819,20 +24819,24 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     '<title>OPRI™ Report — ' + eng.company + '</title>' +
     '<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@400;500;600;700&display=swap" rel="stylesheet">' +
     '<style>' +
-      'body{font-family:"Jost",sans-serif;background:#fff;color:' + CHARCOAL + ';margin:0;padding:0}' +
+      '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>' +
+    'body{font-family:"Jost",sans-serif;background:#fff;color:' + CHARCOAL + ';margin:0;padding:0}' +
       '@media print{.no-print{display:none!important}body{font-size:11px}@page{margin:15mm}}' +
       '.page{max-width:900px;margin:0 auto;padding:0 32px 48px}@media(max-width:600px){.page{padding:0 12px 32px}h2{font-size:20px!important}}' +
       'h2{font-family:"Cormorant Garamond",serif;font-weight:600;margin:0 0 4px 0}' +
       '.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:' + MUTED + ';margin:28px 0 12px 0;padding-bottom:6px;border-bottom:2px solid ' + GOLD + '}' +
-    '</style></head><body>' +
+    '</style><script>function downloadPDF() {  var btn = document.getElementById('btn-pdf');  var origText = btn.innerHTML;  btn.innerHTML = '⏳ Generando...';  btn.disabled = true;  var el = document.getElementById('report-content');  var opt = {    margin: [8, 8, 8, 8],    filename: '' + eng.company.replace(/[^a-zA-Z0-9]/g,'_') + '_OPRI_Report.pdf',    image: { type: 'jpeg', quality: 0.95 },    html2canvas: { scale: 2, useCORS: true, logging: false },    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }  };  html2pdf().set(opt).from(el).save().then(function() {    btn.innerHTML = origText;    btn.disabled = false;  });}</script></head><body>' +
 
     // Print button
     '<div class="no-print" style="background:' + GREEN + ';padding:12px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100">' +
       '<div style="font-family:\'Cormorant Garamond\',serif;font-size:18px;color:white;font-weight:600">OPRI™ Enterprise · Reporte</div>' +
-      '<button onclick="window.print()" style="background:' + GOLD + ';color:' + CHARCOAL + ';border:none;padding:8px 20px;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px">⬇ Descargar PDF</button>' +
+      '<div style="display:flex;gap:8px">' +
+      '<button onclick="downloadPDF()" id="btn-pdf" style="background:' + GOLD + ';color:' + CHARCOAL + ';border:none;padding:8px 20px;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px">⬇ Descargar PDF</button>' +
+      '<button onclick="window.close()" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);padding:8px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">← Volver</button>' +
+      '</div>' +
     '</div>' +
 
-    '<div class="page">' +
+    '<div id="report-content"><div class="page">' +
 
     // Cover
     '<div style="background:linear-gradient(135deg,' + GREEN + ',' + GREEN_MID + ');border-radius:12px;padding:40px;margin:28px 0 24px;color:white">' +
@@ -24894,7 +24898,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       '<div style="font-size:10px;color:' + MUTED + ';text-align:right">OPRI™ Enterprise Edition · Confidencial · ' + date + '<br>© ' + new Date().getFullYear() + ' Promundial Consulting Group · All rights reserved</div>' +
     '</div>' +
 
-    '</div></body></html>';
+    '</div></div></body></html>';
 
   win.document.open();
   win.document.write(html);
