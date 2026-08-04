@@ -133,9 +133,21 @@ const EXTRA_Q = {
   ],
 };
 
+// FULL_DIMS: estructura de SCORING (Core + Extra) — 12 preguntas por dimensión.
+// Se sigue usando en todos los cálculos (dashboards, checkL3, reportes) porque
+// el score de cada dimensión debe reflejar el universo completo de preguntas.
 const FULL_DIMS = CORE_DIMS.map(d => ({
   ...d,
   questions: [...d.questions, ...EXTRA_Q[d.id]],
+}));
+
+// EXTRA_DIMS: estructura de la ENCUESTA del Full — solo las 35 preguntas
+// nuevas (no vuelve a preguntar las 25 del Core). El score sigue
+// calculándose sobre FULL_DIMS gracias al merge con el Core (ver
+// mergeFullWithCore / getScoringResponses más abajo).
+const EXTRA_DIMS = CORE_DIMS.map(d => ({
+  ...d,
+  questions: EXTRA_Q[d.id],
 }));
 
 const DEEP_MODULES = [
@@ -410,6 +422,54 @@ async function apiGetEngagement(code) {
   } catch (e) { return null; }
 }
 
+// ── Respondent matching (Core ↔ Full) ─────────────────────────────────────────
+// Misma lógica de matching que usa ConsistencyView, extraída aquí para reuso.
+function respondentKey(meta) {
+  if (!meta) return null;
+  var name = (meta.name || "anonimo").trim().toLowerCase();
+  var level = (meta.level || "").trim().toLowerCase();
+  var area = (meta.area || "").trim().toLowerCase();
+  return name + "|" + level + "|" + area;
+}
+
+// Combina, para cada respuesta "full" (que ahora solo trae las 35 preguntas
+// adicionales), las respuestas "core" de la MISMA persona (por respondentKey).
+// Devuelve un array de respuestas "full" con answers = {...core, ...extra}.
+// Si no se encuentra match, la respuesta se devuelve tal cual (solo con las
+// 35 respuestas nuevas) — degrada de forma segura en vez de romper.
+function mergeFullWithCore(coreRR, fullRR) {
+  var coreByKey = {};
+  coreRR.forEach(function(r) {
+    var k = respondentKey(r.meta);
+    if (k) coreByKey[k] = r;
+  });
+  return fullRR.map(function(r) {
+    var k = respondentKey(r.meta);
+    var coreMatch = k ? coreByKey[k] : null;
+    if (!coreMatch) return r; // sin match: solo las 35 nuevas
+    return Object.assign({}, r, {
+      answers: Object.assign({}, coreMatch.answers, r.answers),
+    });
+  });
+}
+
+// Helper único para obtener las respuestas "listas para scoring" de un tag.
+// - "core": tal cual.
+// - "full": mergeadas con su Core correspondiente (35 → 60 preguntas por persona).
+// Engagements viejos (Full de 60 preguntas) siguen funcionando: su answers
+// ya trae las 25 del Core, así que el merge simplemente no pisa nada nuevo.
+function getScoringResponses(allResponses, tag) {
+  if (tag === "core") {
+    return allResponses.filter(function(r) { return r.survey === "core"; });
+  }
+  if (tag === "full") {
+    var coreRR = allResponses.filter(function(r) { return r.survey === "core"; });
+    var fullRR = allResponses.filter(function(r) { return r.survey === "full"; });
+    return mergeFullWithCore(coreRR, fullRR);
+  }
+  return allResponses.filter(function(r) { return r.survey === tag; });
+}
+
 
 // ── Scoring ───────────────────────────────────────────────────────────────────
 function computeOPRI(responses, dims) {
@@ -648,7 +708,7 @@ function LikertQuestion({ qid, text, value, color, onChange }) {
 function MetaForm({ onStart, title, subtitle, presetCompany }) {
   const [meta, setMeta] = useState({ company: presetCompany || "", name: "", level: "", area: "", country: "", bu: "" });
   function set(key, val) { setMeta(function(p) { const n = Object.assign({}, p); n[key] = val; return n; }); }
-  const canStart = meta.level && meta.company;
+  const canStart = meta.level && meta.company && meta.name && meta.name.trim().length > 0;
   return (
     <div>
       <SurveyHeader title={title} sub={subtitle} />
@@ -659,7 +719,7 @@ function MetaForm({ onStart, title, subtitle, presetCompany }) {
           <input value={meta.company} onChange={function(e) { set("company", e.target.value); }} placeholder="Ej. Banco Pichincha" style={s.input} readOnly={!!presetCompany} />
         </div>
         <div style={{ marginBottom: 13 }}>
-          <label style={s.label}>Nombre (opcional)</label>
+          <label style={s.label}>Nombre *</label>
           <input value={meta.name} onChange={function(e) { set("name", e.target.value); }} placeholder="Ej. Juan Pérez" style={s.input} />
         </div>
         <div style={{ marginBottom: 13 }}>
@@ -720,14 +780,17 @@ function loadCompletedSurveys() {
 // ── OPRI Survey (Core & Full) ─────────────────────────────────────────────────
 function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inheritedMeta, onMetaSaved, onSurveyDone, savedProgress, onProgress, onClearProgress, onLogout }) {
   const isCore = level === "core";
-  const dims = isCore ? CORE_DIMS : FULL_DIMS;
+  // Full ya NO repite las 25 del Core: solo pregunta las 35 adicionales
+  // (EXTRA_DIMS). El score sigue calculándose sobre las 12 preguntas por
+  // dimensión gracias al merge con el Core (ver getScoringResponses).
+  const dims = isCore ? CORE_DIMS : EXTRA_DIMS;
   const allQs = [];
   dims.forEach(function(d) { d.questions.forEach(function(q) { allQs.push(q); }); });
 
   // Restore from saved progress or use inheritedMeta
   var storedMeta = loadSavedMeta();
   var initialMeta = isCore ? (savedProgress && savedProgress.meta ? savedProgress.meta : null) : (inheritedMeta || storedMeta || (savedProgress && savedProgress.meta) || null);
-  var initialDimIdx = (savedProgress && savedProgress.dimIdx != null && savedProgress.dimIdx < (isCore ? CORE_DIMS : FULL_DIMS).length) ? savedProgress.dimIdx : 0;
+  var initialDimIdx = (savedProgress && savedProgress.dimIdx != null && savedProgress.dimIdx < dims.length) ? savedProgress.dimIdx : 0;
   var initialAnswers = savedProgress && savedProgress.answers ? savedProgress.answers : {};
 
   const [meta, setMeta] = useState(initialMeta);
@@ -767,10 +830,10 @@ function OPRISurvey({ level, onDone, onBack, engagementCode, presetCompany, inhe
   }, [answers, dimIdx]);
 
   if (done) {
-    return <DoneScreen title={isCore ? "OPRI Core 25" : "OPRI Full 60"} color={GREEN} onBack={onBack} onNew={function() { clearSavedMeta(); setMeta(null); setDimIdx(0); setAnswers({}); setDone(false); }} />;
+    return <DoneScreen title={isCore ? "OPRI Core 25" : "OPRI Full — 35 adicionales"} color={GREEN} onBack={onBack} onNew={function() { clearSavedMeta(); setMeta(null); setDimIdx(0); setAnswers({}); setDone(false); }} />;
   }
   if (!meta) {
-    return <MetaForm title={isCore ? "OPRI Core 25" : "OPRI Full 60"} subtitle={isCore ? "25 preguntas · ~8 min" : "60 preguntas · ~18 min"} onStart={handleStart} presetCompany={presetCompany} />;
+    return <MetaForm title={isCore ? "OPRI Core 25" : "OPRI Full — 35 adicionales"} subtitle={isCore ? "25 preguntas · ~8 min" : "35 preguntas · ~10 min"} onStart={handleStart} presetCompany={presetCompany} />;
   }
 
   const dim = dims[dimIdx];
@@ -879,15 +942,15 @@ function CascadeSelector({ coreScores, fullScores, deepCounts, onSelect }) {
       <SurveyCard level="Level 1" badge={nCore > 0 ? nCore + " resp." : "Primer paso"} label="OPRI Core 25" desc="Diagnóstico rápido · 25 preguntas · ~8 min" color={GREEN} status="available" onClick={function() { onSelect({ id: "core" }); }} />
 
       {nCore === 0 && (
-        <SurveyCard level="Level 2" badge="Bloqueado" label="OPRI Full 60" desc="Requiere OPRI Core primero" color={GREEN_MID} status="locked" lockMsg="Complete el OPRI Core 25 para desbloquear este nivel." />
+        <SurveyCard level="Level 2" badge="Bloqueado" label="OPRI Full" desc="Requiere OPRI Core primero" color={GREEN_MID} status="locked" lockMsg="Complete el OPRI Core 25 para desbloquear este nivel." />
       )}
       {nCore > 0 && (
-        <SurveyCard level="Level 2" badge={nFull > 0 ? nFull + " resp." : "Siguiente paso"} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status="activated" triggers={[]} onClick={function() { onSelect({ id: "full" }); }} />
+        <SurveyCard level="Level 2" badge={nFull > 0 ? nFull + " resp." : "Siguiente paso"} label="OPRI Full" desc="35 preguntas · ~10 min" color={GREEN_MID} status="activated" triggers={[]} onClick={function() { onSelect({ id: "full" }); }} />
       )}
 
       {nFull === 0 && nCore > 0 && (
         <div style={{ padding: "11px 13px", background: CREAM_DK, borderRadius: 8, fontSize: 12, color: MUTED, marginTop: 4 }}>
-          Los módulos Deep Dive se calcularán una vez completado el OPRI Full 60.
+          Los módulos Deep Dive se calcularán una vez completado el OPRI Full.
         </div>
       )}
       {nFull > 0 && activeMods.length === 0 && (
@@ -946,7 +1009,7 @@ function SurveyCard({ level, badge, label, desc, color, status, triggers, lockMs
 
 // ── Dashboard views ───────────────────────────────────────────────────────────
 function OPRIDash({ tag, title, dims, responses }) {
-  const rr = responses.filter(function(r) { return r.survey === tag; });
+  const rr = getScoringResponses(responses, tag);
   const sc = computeOPRI(rr, dims);
   if (!sc) {
     return (
@@ -997,7 +1060,7 @@ function OPRIDash({ tag, title, dims, responses }) {
 }
 
 function PAIDash({ tag, title, dims, responses }) {
-  const rr = responses.filter(function(r) { return r.survey === tag; });
+  const rr = getScoringResponses(responses, tag);
   const sc = computeOPRI(rr, dims);
   if (!sc) return <div style={{ padding: 40, textAlign: "center", color: MUTED_LT }}>Sin datos aún.</div>;
   const lC = rr.filter(function(r) { return r.meta && PAI_LEAD.indexOf(r.meta.level) >= 0; }).length;
@@ -1078,7 +1141,7 @@ function PAIDash({ tag, title, dims, responses }) {
 }
 
 function HeatView({ tag, dims, responses }) {
-  const rr = responses.filter(function(r) { return r.survey === tag; });
+  const rr = getScoringResponses(responses, tag);
   const sc = computeOPRI(rr, dims);
   if (!sc) return <div style={{ padding: 40, textAlign: "center", color: MUTED_LT }}>Sin datos aún.</div>;
   const areas = Object.keys(sc.heatArea);
@@ -1309,7 +1372,7 @@ function ConsistencyView({ responses }) {
       <div style={{ background: WHITE, borderRadius: 10, padding: "14px 16px", marginBottom: 16, border: "1px solid " + CREAM_DK }}>
         <SectionHeader title="Índice de Consistencia · Core vs Full" />
         <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.6, marginBottom: 8 }}>
-          Compara el score de cada persona en el Core 25 vs las preguntas adicionales del Full 60 por dimensión.
+          Compara el score de cada persona en el Core 25 vs las preguntas adicionales del Full por dimensión.
           Una diferencia negativa indica que la percepción se vuelve más crítica con preguntas más profundas.
         </p>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
@@ -1403,8 +1466,8 @@ function CompanySelector({ responses, selected, onSelect }) {
 function ResultsPanel({ responses, coreScores, fullScores, l2, l3, activeMods, hideCompanySelector }) {
   const [selectedCompany, setSelectedCompany] = useState("ALL");
   const filteredResponses = selectedCompany === "ALL" ? responses : responses.filter(function(r) { return r.meta && r.meta.company === selectedCompany; });
-  const fCoreRR = filteredResponses.filter(function(r) { return r.survey === "core"; });
-  const fFullRR = filteredResponses.filter(function(r) { return r.survey === "full"; });
+  const fCoreRR = getScoringResponses(filteredResponses, "core");
+  const fFullRR = getScoringResponses(filteredResponses, "full");
   const fCoreScores = computeOPRI(fCoreRR, CORE_DIMS);
   const fFullScores = computeOPRI(fFullRR, FULL_DIMS);
   const fL2 = checkL2(fCoreScores);
@@ -1435,7 +1498,7 @@ function ResultsPanel({ responses, coreScores, fullScores, l2, l3, activeMods, h
     if (activeTab === "core_opri") return <OPRIDash tag="core" title="OPRI Core 25" dims={CORE_DIMS} responses={filteredResponses} />;
     if (activeTab === "core_pai")  return <PAIDash  tag="core" title="OPRI Core"    dims={CORE_DIMS} responses={filteredResponses} />;
     if (activeTab === "core_heat") return <HeatView tag="core" dims={CORE_DIMS} responses={filteredResponses} />;
-    if (activeTab === "full_opri") return <OPRIDash tag="full" title="OPRI Full 60" dims={FULL_DIMS} responses={filteredResponses} />;
+    if (activeTab === "full_opri") return <OPRIDash tag="full" title="OPRI Full" dims={FULL_DIMS} responses={filteredResponses} />;
     if (activeTab === "full_pai")  return <PAIDash  tag="full" title="OPRI Full"    dims={FULL_DIMS} responses={filteredResponses} />;
     if (activeTab === "full_heat") return <HeatView tag="full" dims={FULL_DIMS} responses={filteredResponses} />;
     if (activeTab === "consistency") return <ConsistencyView responses={filteredResponses} />;
@@ -1539,7 +1602,7 @@ function HomeScreen({ responses, coreScores, fullScores, l2, l3, activeMods, dee
       <div style={{ background: WHITE, borderRadius: 11, padding: "16px", border: "1px solid " + CREAM_DK, marginBottom: 18 }}>
         <SectionHeader title="Estado del Diagnóstico" />
         <StepRow label="Level 1" desc="OPRI Core 25" n={coreN} score={coreScores ? coreScores.opri : null} color={GREEN} status={stepStatus("core")} />
-        <StepRow label="Level 2" desc="OPRI Full 60" n={fullN} score={fullScores ? fullScores.opri : null} color={GREEN_MID} status={stepStatus("full")}
+        <StepRow label="Level 2" desc="OPRI Full (35 adicionales)" n={fullN} score={fullScores ? fullScores.opri : null} color={GREEN_MID} status={stepStatus("full")}
           subItems={fullN > 0 && activeMods.length === 0 ? [
             <div key="nodp" style={{ padding: "7px 10px", background: "#DCFCE7", borderRadius: 7, fontSize: 11, color: GREEN, border: "1px solid " + GREEN_LT + "44" }}>✓ Sin Deep Dive requerido.</div>
           ] : activeMods.map(function(m) {
@@ -1641,8 +1704,8 @@ function AdminPanel({ password, onExit }) {
   }
 
   if (selectedEng) {
-    const coreRR = engResponses.filter(function(r) { return r.survey === "core"; });
-    const fullRR = engResponses.filter(function(r) { return r.survey === "full"; });
+    const coreRR = getScoringResponses(engResponses, "core");
+    const fullRR = getScoringResponses(engResponses, "full");
     const coreScores = computeOPRI(coreRR, CORE_DIMS);
     const fullScores = computeOPRI(fullRR, FULL_DIMS);
     const l2 = checkL2(coreScores);
@@ -1881,7 +1944,7 @@ function WelcomeScreen({ company, onStart }) {
           <div style={{ fontSize: 11, color: GREEN, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Estructura del diagnóstico</div>
           {[
             { level: "Level 1", name: "OPRI Core 25", time: "~8 min", desc: "Diagnóstico base. Lo completan todos los participantes.", color: GREEN, always: true },
-            { level: "Level 2", name: "OPRI Full 60", time: "+10 min", desc: "Lo completan todos los participantes después del Core.", color: GREEN_MID, always: true },
+            { level: "Level 2", name: "OPRI Full", time: "+10 min", desc: "35 preguntas adicionales. Las completan todos los participantes después del Core.", color: GREEN_MID, always: true },
             { level: "Level 3", name: "Deep Dive", time: "+12 min", desc: "Módulos especializados que se activan según los resultados del Full.", color: VIOLET, always: false },
           ].map(function(l) {
             return (
@@ -1901,7 +1964,7 @@ function WelcomeScreen({ company, onStart }) {
             );
           })}
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid " + CREAM_DK, fontSize: 12, color: MUTED }}>
-            Tiempo total estimado: <strong style={{ color: CHARCOAL }}>entre 8 y 30 minutos</strong>, según los niveles que se activen para usted.
+            Tiempo total estimado: <strong style={{ color: CHARCOAL }}>entre 8 y 22 minutos</strong>, según los niveles que se activen para usted.
           </div>
         </div>
         <p style={{ fontSize: 14, color: CHARCOAL, lineHeight: 1.8, marginBottom: 28 }}>
@@ -2040,8 +2103,8 @@ function EngagementSurveyPage({ code }) {
     </div>
   );
 
-  const coreRR = responses.filter(function(r) { return r.survey === "core"; });
-  const fullRR = responses.filter(function(r) { return r.survey === "full"; });
+  const coreRR = getScoringResponses(responses, "core");
+  const fullRR = getScoringResponses(responses, "full");
   const coreScores = computeOPRI(coreRR, CORE_DIMS);
   const fullScores = computeOPRI(fullRR, FULL_DIMS);
   const l2 = checkL2(coreScores);
@@ -2099,7 +2162,7 @@ function EngagementSurveyPage({ code }) {
 
           {/* Level 2 — always shown after Core */}
           {coreDone && (
-            <SurveyCard level="Level 2" badge={fullDone ? "✓ Completado" : "Siguiente paso"} label="OPRI Full 60" desc="60 preguntas · ~18 min" color={GREEN_MID} status={fullDone ? "done" : "activated"} triggers={[]} onClick={fullDone ? undefined : function() { setActiveSurvey({ id: "full" }); }} />
+            <SurveyCard level="Level 2" badge={fullDone ? "✓ Completado" : "Siguiente paso"} label="OPRI Full" desc="35 preguntas · ~10 min" color={GREEN_MID} status={fullDone ? "done" : "activated"} triggers={[]} onClick={fullDone ? undefined : function() { setActiveSurvey({ id: "full" }); }} />
           )}
 
           {/* Level 3 — only shown after THIS respondent completes Full */}
@@ -2497,8 +2560,6 @@ function getRecommendations(dimId, score) {
   };
   return recs[dimId] || { lss: [], belbin: [], leadership: [] };
 }
-// ── Main report generator ─────────────────────────────────────────────────────
-var LOGO_B64 = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODU4IiBoZWlnaHQ9IjEyOSIgdmlld0JveD0iMCAwIDg1OCAxMjkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xMTguMTk1IDU0LjgxNzRMOTkuNDA4MyAzNi4wMzA4TDg3LjYwMDMgNDguNDQzM0wxMDkuMTg5IDQ4LjY1MDhMMTAxLjA2MyA2MC4xNzE5TDgwLjAzNTcgNTkuOTcwNEw3Ni44MzAzIDU5LjkzOTlMNjYuNDgxNSA1OS44NDIyVjI0LjI4MzlMNzcuNDUzIDE2LjczMTRWMzguMzQ0OEw4OS44Nzc3IDI2LjUwMDJMNzEuMTgyNyA3LjgwNTI0QzY2LjEwOTEgMi43MzE1OSA1Ny44OTExIDIuNzMxNTkgNTIuODE3NCA3LjgwNTI0TDM0LjAzMDkgMjYuNTkxOEw0Ni40NDMzIDM4LjM5OThMNDYuNjUwOSAxNi44MTA4TDU4LjE3MTkgMjQuOTM3Mkw1Ny45NzA0IDQ1Ljk2NDRMNTcuOTM5OSA0OS4xNjk4TDU3Ljg0MjIgNTkuNTE4NkgyMi4yODM5TDE0LjczMTQgNDguNTQ3SDM2LjM0NDhMMjQuNTAwMiAzNi4xMjI0TDUuODA1MjQgNTQuODE3NEMwLjczMTU4NyA1OS44OTEgMC43MzE1ODcgNjguMTE1MSA1LjgwNTI0IDczLjE4MjZMMjQuNTkxOCA5MS45NjkyTDM2LjM5OTggNzkuNTU2N0wxNC44MTA4IDc5LjM0OTJMMjIuOTM3MiA2Ny44MjgxTDQzLjk2NDUgNjguMDI5Nkw0Ny4xNjk5IDY4LjA2MDFMNTcuNTE4NiA2OC4xNTc4VjEwMy43MTZMNDYuNTQ3MSAxMTEuMjY5Vjg5LjY1NTJMMzQuMTIyNSAxMDEuNUw1Mi44MTc0IDEyMC4xOTVDNTcuODkxMSAxMjUuMjY4IDY2LjEwOTEgMTI1LjI2OCA3MS4xODI3IDEyMC4xOTVMODkuOTY5MiAxMDEuNDA4TDc3LjU1NjggODkuNjAwMkw3Ny4zNDkyIDExMS4xODlMNjUuODI4MiAxMDMuMDYzTDY2LjAyOTcgODIuMDM1Nkw2Ni4wNjAyIDc4LjgzMDJMNjYuMTU3OSA2OC40ODE0SDEwMS43MTZMMTA5LjI2OSA3OS40NTNIODcuNjU1M0w5OS40OTk5IDkxLjg3NzZMMTE4LjE5NSA3My4xODI2QzEyMy4yNjkgNjguMTA5IDEyMy4yNjkgNTkuODkxIDExOC4xOTUgNTQuODE3NFoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTE3My45NzcgNzMuMTlDMTcyLjcwMSA3My4xOSAxNzEuNDI1IDczLjE5IDE3MC4xNDkgNzMuMTlDMTY4Ljg3MyA3My4xOSAxNjcuNzM4IDczLjA0ODIgMTY2LjYwNCA3Mi45MDY1VjEwNC4wOThIMTUyVjI0LjI3NTlIMTc1LjExMUMxNzguOTM5IDI0LjI3NTkgMTgyLjM0MiAyNC40MTc3IDE4NS4xNzggMjQuODQzQzE4OC4wMTQgMjUuMjY4NCAxOTAuNzA4IDI1LjY5MzcgMTkyLjk3NiAyNi40MDI2QzE5OC4zNjQgMjguMTAzOSAyMDIuNjE4IDMwLjc5NzggMjA1LjU5NSAzNC4zNDIzQzIwOC41NzMgMzguMDI4NiAyMDkuOTkxIDQyLjcwNzMgMjA5Ljk5MSA0OC4zNzg1QzIwOS45OTEgNTIuMjA2NiAyMDkuMTQgNTUuNzUxMSAyMDcuNTggNTguNzI4NEMyMDYuMDIxIDYxLjg0NzYgMjAzLjYxIDY0LjM5OTYgMjAwLjYzMyA2Ni41MjYzQzE5Ny41MTMgNjguNjUzIDE5My44MjcgNzAuMzU0NCAxODkuNDMyIDcxLjQ4ODdDMTg0Ljg5NCA3Mi42MjI5IDE3OS43OSA3My4xOSAxNzMuOTc3IDczLjE5Wk0xNjYuNjA0IDYwLjU3MTZDMTY3LjQ1NSA2MC43MTM0IDE2OC40NDcgNjAuNzEzNCAxNjkuODY1IDYwLjg1NTFDMTcxLjE0MSA2MC44NTUxIDE3Mi41NTkgNjAuOTk3IDE3My44MzUgNjAuOTk3QzE3Ny44MDUgNjAuOTk3IDE4MS4wNjYgNjAuNzEzNCAxODMuNzYgNjAuMDA0NUMxODYuNDU0IDU5LjQzNzQgMTg4LjU4MSA1OC40NDQ5IDE5MC4xNDEgNTcuMzEwNkMxOTEuODQyIDU2LjE3NjQgMTkyLjk3NiA1NC43NTg2IDE5My42ODUgNTMuMTk5MUMxOTQuMzk0IDUxLjYzOTUgMTk0LjgxOSA0OS43OTYzIDE5NC44MTkgNDcuOTUzMkMxOTQuODE5IDQ1LjU0MjkgMTk0LjI1MiA0My41NTggMTkzLjI2IDQxLjg1NjdDMTkyLjEyNiA0MC4xNTUzIDE5MC4yODIgMzguODc5MyAxODcuNTg4IDM3Ljg4NjhDMTg2LjE3MSAzNy40NjE1IDE4NC40NjkgMzcuMDM2MSAxODIuNDg0IDM2Ljg5NDNDMTgwLjQ5OSAzNi42MTA4IDE3Ny45NDcgMzYuNjEwOCAxNzQuOTY5IDM2LjYxMDhIMTY2Ljc0NlY2MC41NzE2SDE2Ni42MDRaIiBmaWxsPSIjRjdGMEVEIi8+CjxwYXRoIGQ9Ik0yNzcuMTk3IDQ4LjIzN0MyNzcuMTk3IDUzLjc2NjQgMjc1LjYzOCA1OC41ODcgMjcyLjUxOSA2Mi40MTVDMjY5LjM5OSA2Ni4yNDMxIDI2NC43MiA2OS4yMjA0IDI1OC4xOTggNzEuMDYzNlY3MS4zNDcyTDI4Mi4wMTggMTA0LjI0SDI2NC40MzdMMjQyLjc0MyA3My4zMzIxSDIzMi42NzdWMTA0LjI0SDIxOC4wNzNWMjQuNDE4SDI0Mi4zMThDMjQ2LjI4OCAyNC40MTggMjUwLjExNiAyNC43MDE1IDI1My41MTkgMjUuMTI2OUMyNTYuOTIyIDI1LjU1MjIgMjU5LjkgMjYuMjYxMSAyNjIuNDUyIDI3LjI1MzZDMjY3LjEzMSAyOS4wOTY3IDI3MC44MTcgMzEuNjQ4NyAyNzMuMzY5IDM1LjE5MzJDMjc1LjkyMSAzOC40NTQyIDI3Ny4xOTcgNDIuOTkxMiAyNzcuMTk3IDQ4LjIzN1pNMjM5LjkwOCA2MC45OTcyQzI0My4zMTEgNjAuOTk3MiAyNDYuMTQ2IDYwLjg1NTUgMjQ4LjQxNSA2MC41NzE5QzI1MC42ODMgNjAuMjg4MyAyNTIuNjY4IDU5Ljg2MyAyNTQuMjI4IDU5LjI5NTlDMjU3LjIwNiA1OC4xNjE2IDI1OS4xOTEgNTYuNjAyIDI2MC4zMjUgNTQuNzU4OUMyNjEuNDU5IDUyLjc3MzkgMjYyLjAyNiA1MC42NDcyIDI2Mi4wMjYgNDguMDk1MkMyNjIuMDI2IDQ1Ljk2ODUgMjYxLjYwMSA0My45ODM2IDI2MC43NSA0Mi40MjRDMjU5LjkgNDAuNzIyNiAyNTguMzQgMzkuNDQ2NiAyNTYuMjEzIDM4LjQ1NDJDMjU0Ljc5NSAzNy43NDUzIDI1My4wOTQgMzcuMzE5OSAyNTAuOTY3IDM3LjAzNjRDMjQ4Ljg0IDM2Ljc1MjggMjQ2LjI4OCAzNi42MTEgMjQzLjE2OSAzNi42MTFIMjMyLjY3N1Y2MS4xMzlIMjM5LjkwOFY2MC45OTcyWiIgZmlsbD0iI0Y3RjBFRCIvPgo8cGF0aCBkPSJNMzYxLjg0MyA2NC4yNThDMzYxLjg0MyA3MC4zNTQ1IDM2MC45OTIgNzUuODgzOSAzNTkuMjkxIDgwLjk4OEMzNTcuNTkgODYuMDkyMSAzNTUuMDM3IDkwLjQ4NzMgMzUxLjc3NiA5NC4wMzE4QzM0OC41MTUgOTcuNzE4MSAzNDQuNDAzIDEwMC41NTQgMzM5LjU4MyAxMDIuNTM5QzMzNC43NjIgMTA0LjUyNCAzMjkuMjMyIDEwNS41MTYgMzIzLjEzNSAxMDUuNTE2QzMxNi44OTcgMTA1LjUxNiAzMTEuNTA5IDEwNC41MjQgMzA2LjY4OCAxMDIuNTM5QzMwMS44NjcgMTAwLjU1NCAyOTcuNzU2IDk3LjcxODEgMjk0LjQ5NSA5NC4wMzE4QzI5MS4yMzMgOTAuMzQ1NSAyODguNjgxIDg1Ljk1MDMgMjg2Ljk4IDgwLjk4OEMyODUuMjc4IDc1Ljg4MzkgMjg0LjQyOCA3MC4zNTQ1IDI4NC40MjggNjQuMjU4QzI4NC40MjggNTguMTYxNCAyODUuMjc4IDUyLjYzMiAyODYuOTggNDcuNTI3OUMyODguNjgxIDQyLjQyMzkgMjkxLjIzMyAzOC4wMjg3IDI5NC40OTUgMzQuNDg0MkMyOTcuNzU2IDMwLjc5NzkgMzAxLjg2NyAyNy45NjIzIDMwNi42ODggMjUuOTc3M0MzMTEuNTA5IDIzLjk5MjQgMzE3LjAzOSAyMyAzMjMuMTM1IDIzQzMyOS4zNzQgMjMgMzM0Ljc2MiAyMy45OTI0IDMzOS41ODMgMjUuOTc3M0MzNDQuNDAzIDI3Ljk2MjMgMzQ4LjUxNSAzMC43OTc5IDM1MS43NzYgMzQuNDg0MkMzNTUuMDM3IDM4LjE3MDQgMzU3LjU5IDQyLjU2NTYgMzU5LjI5MSA0Ny41Mjc5QzM2MC45OTIgNTIuNDkwMyAzNjEuODQzIDU4LjE2MTQgMzYxLjg0MyA2NC4yNThaTTM0Ni42NzIgNjQuMjU4QzM0Ni42NzIgNTkuNDM3NSAzNDYuMTA1IDU1LjE4NDEgMzQ0LjgyOSA1MS40OTc4QzM0My42OTUgNDcuODExNSAzNDEuOTkzIDQ0LjgzNDEgMzM5Ljg2NiA0Mi40MjM4QzMzNy43MzkgNDAuMDEzNSAzMzUuMTg3IDM4LjE3MDQgMzMyLjM1MiAzNy4wMzYyQzMyOS4zNzQgMzUuOTAxOSAzMjYuMjU1IDM1LjE5MzEgMzIyLjg1MiAzNS4xOTMxQzMxOS40NDkgMzUuMTkzMSAzMTYuMTg4IDM1Ljc2MDIgMzEzLjM1MiAzNy4wMzYyQzMxMC4zNzUgMzguMTcwNCAzMDcuOTY0IDQwLjAxMzUgMzA1LjgzOCA0Mi40MjM4QzMwMy43MTEgNDQuODM0MSAzMDIuMDA5IDQ3Ljk1MzMgMzAwLjg3NSA1MS40OTc4QzI5OS43NDEgNTUuMTg0MSAyOTkuMDMyIDU5LjQzNzUgMjk5LjAzMiA2NC4yNThDMjk5LjAzMiA2OS4wNzg1IDI5OS41OTkgNzMuMzMxOSAzMDAuODc1IDc3LjAxODJDMzAyLjAwOSA4MC43MDQ1IDMwMy43MTEgODMuNjgxOSAzMDUuODM4IDg2LjA5MjJDMzA3Ljk2NCA4OC41MDI0IDMxMC41MTYgOTAuMzQ1NiAzMTMuMzUyIDkxLjQ3OThDMzE2LjE4OCA5Mi43NTU4IDMxOS40NDkgOTMuMzIyOSAzMjIuODUyIDkzLjMyMjlDMzI2LjI1NSA5My4zMjI5IDMyOS41MTYgOTIuNzU1OCAzMzIuMzUyIDkxLjQ3OThDMzM1LjE4NyA5MC4yMDM4IDMzNy43MzkgODguNTAyNCAzMzkuODY2IDg2LjA5MjJDMzQxLjk5MyA4My42ODE5IDM0My42OTUgODAuNzA0NSAzNDQuODI5IDc3LjAxODJDMzQ2LjEwNSA3My4zMzE5IDM0Ni42NzIgNjkuMDc4NSAzNDYuNjcyIDY0LjI1OFoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTQxMS4wNDMgODIuNjg5MkM0MTIuNzQ1IDc2LjQ1MDkgNDE1LjAxMyA2OS42NDU1IDQxNy41NjUgNjIuNDE0N0w0MzEuMzE5IDI0LjEzNEg0NTEuODc4VjEwMy45NTZINDM3LjI3NFY2My40MDcxQzQzNy4yNzQgNTcuNDUyNCA0MzcuNTU3IDUwLjY0NjkgNDM3Ljk4MyA0Mi43MDcySDQzNy40MTVDNDM2LjcwNiA0NC45NzU3IDQzNS45OTggNDcuNTI3NyA0MzUuMDA1IDUwLjM2MzNDNDM0LjE1NCA1My4xOTkgNDMzLjE2MiA1Ni4wMzQ1IDQzMi4xNjkgNTguNzI4M0w0MTUuNTggMTAzLjgxNEg0MDYuMDgxTDM4OS40OTIgNTguNzI4M0MzODguNDk5IDU2LjAzNDUgMzg3LjUwNyA1My4xOTkgMzg2LjY1NiA1MC4zNjMzQzM4NS44MDUgNDcuNTI3NyAzODQuOTU0IDQ0Ljk3NTcgMzg0LjI0NSA0Mi43MDcySDM4My42NzhDMzg0LjEwNCA1MC4wNzk4IDM4NC4zODcgNTYuODg1MiAzODQuMzg3IDYzLjI2NTNWMTAzLjgxNEgzNjkuNzgzVjIzLjk5MjJIMzkwLjJMNDAzLjk1NCA2MS45ODkzQzQwNi4yMjIgNjguMzY5NCA0MDguNDkxIDc1LjE3NDggNDEwLjQ3NiA4Mi40MDU2SDQxMS4wNDNWODIuNjg5MloiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTQ5Ni42ODMgMTA1LjY1OEM0OTIuNTcxIDEwNS42NTggNDg4Ljc0MyAxMDUuMjMyIDQ4NS4zNCAxMDQuMzgyQzQ4MS45MzcgMTAzLjUzMSA0NzkuMTAxIDEwMi4zOTcgNDc2LjU0OSAxMDAuODM3QzQ3My45OTcgOTkuMjc3NyA0NzEuODcgOTcuNDM0NiA0NzAuMDI3IDk1LjE2NjFDNDY4LjE4NCA5Mi44OTc2IDQ2Ni43NjYgOTAuNDg3NCA0NjUuNzczIDg3LjY1MThDNDY0LjkyMyA4NS4zODMzIDQ2NC4yMTQgODIuOTczIDQ2My45MyA4MC4yNzkyQzQ2My41MDUgNzcuNTg1NCA0NjMuMzYzIDc0LjYwOCA0NjMuMzYzIDcxLjIwNTNWMjQuMTM0M0g0NzcuOTY3VjY5LjkyOTNDNDc3Ljk2NyA3NS42MDA1IDQ3OC42NzYgNzkuOTk1NiA0NzkuOTUyIDgzLjExNDhDNDgxLjUxMiA4Ni42NTkzIDQ4My42MzkgODkuMjExNCA0ODYuNjE2IDkwLjc3MUM0ODkuNDUyIDkyLjMzMDUgNDkyLjk5NiA5My4xODEyIDQ5Ni44MjUgOTMuMTgxMkM1MDAuNzk1IDkzLjE4MTIgNTA0LjE5OCA5Mi4zMzA1IDUwNy4wMzMgOTAuNzcxQzUwOS44NjkgODkuMjExNCA1MTIuMTM4IDg2LjY1OTMgNTEzLjY5NyA4My4xMTQ4QzUxNS4xMTUgNzkuOTk1NiA1MTUuNjgyIDc1LjQ1ODcgNTE1LjY4MiA2OS45MjkzVjI0LjEzNDNINTMwLjI4NlY3MS4yMDUzQzUzMC4yODYgNzQuNjA4IDUzMC4xNDQgNzcuNTg1NCA1MjkuNzE5IDgwLjI3OTJDNTI5LjI5NCA4Mi45NzMgNTI4LjcyNyA4NS41MjUxIDUyNy44NzYgODcuNjUxOEM1MjYuNzQyIDkwLjQ4NzQgNTI1LjMyNCA5Mi44OTc2IDUyMy40ODEgOTUuMTY2MUM1MjEuNjM3IDk3LjQzNDYgNTE5LjUxMSA5OS4yNzc3IDUxNi44MTcgMTAwLjgzN0M1MTQuMjY0IDEwMi4zOTcgNTExLjE0NSAxMDMuNTMxIDUwNy44ODQgMTA0LjM4MkM1MDQuNjIzIDEwNS4yMzIgNTAwLjkzNiAxMDUuNjU4IDQ5Ni42ODMgMTA1LjY1OFoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTU4My41OTcgNjEuNDIyM0M1ODkuMjY5IDY5LjY0NTUgNTkzLjk0OCA3Ni44NzYzIDU5Ny42MzQgODMuMTE0Nkg1OTguMDZDNTk3LjYzNCA3Mi43NjQ3IDU5Ny4zNTEgNjUuMTA4NiA1OTcuMzUxIDYwLjQyOThWMjQuMjc1OUg2MTEuOTU1VjEwNC4wOThINTk2LjY0Mkw1NzAuNTUzIDY3LjM3NzFDNTY2LjAxNiA2MC45OTcgNTYxLjE5NSA1My42MjQ0IDU1Ni4zNzQgNDUuMjU5M0g1NTUuODA3QzU1Ni4yMzMgNTUuMDQyMiA1NTYuNTE2IDYyLjY5ODMgNTU2LjUxNiA2Ny45NDQxVjEwNC4wOThINTQxLjkxMlYyNC4yNzU5SDU1Ny4yMjVMNTgzLjU5NyA2MS40MjIzWiIgZmlsbD0iI0Y3RjBFRCIvPgo8cGF0aCBkPSJNNjIzLjU4MiAxMDQuMDk4VjI0LjI3NTlINjQ0LjcwOEM2NDYuNTUxIDI0LjI3NTkgNjQ4LjUzNiAyNC4yNzU5IDY1MC4zNzkgMjQuNDE3N0M2NTIuMzY0IDI0LjU1OTUgNjU0LjIwOCAyNC43MDEyIDY1Ni4wNTEgMjQuOTg0OEM2NTcuODk0IDI1LjI2ODMgNjU5LjU5NiAyNS41NTIgNjYxLjI5NyAyNS44MzU1QzY2Mi45OTggMjYuMTE5MSA2NjQuNTU4IDI2LjU0NDQgNjY1Ljk3NiAyNy4xMTE1QzY3MC4yMyAyOC41MjkzIDY3NC4wNTggMzAuMjMwNyA2NzcuMzE5IDMyLjY0MDlDNjgwLjU4IDM0LjkwOTQgNjgzLjI3NCAzNy43NDUgNjg1LjU0MyA0MC44NjQyQzY4Ny44MTEgNDMuOTgzMyA2ODkuMzcxIDQ3LjUyNzkgNjkwLjUwNSA1MS4zNTU5QzY5MS42MzkgNTUuMTg0IDY5Mi4yMDYgNTkuNDM3NCA2OTIuMjA2IDYzLjk3NDNDNjkyLjIwNiA2OC4yMjc3IDY5MS43ODEgNzIuMzM5NCA2OTAuNzg5IDc2LjAyNTZDNjg5Ljc5NiA3OS44NTM3IDY4OC4zNzggODMuMjU2NCA2ODYuMzkzIDg2LjM3NTZDNjg0LjQwOCA4OS40OTQ3IDY4MS45OTggOTIuMTg4NiA2NzkuMDIgOTQuNTk4OUM2NzYuMDQzIDk3LjAwOTIgNjcyLjQ5OCA5OC44NTIzIDY2OC41MjggMTAwLjQxMkM2NjUuMTI1IDEwMS42ODggNjYxLjI5NyAxMDIuNjggNjU3LjA0MyAxMDMuMjQ3QzY1Mi43OSAxMDMuOTU2IDY0Ny45NjkgMTA0LjI0IDY0Mi41ODEgMTA0LjI0SDYyMy41ODJWMTA0LjA5OFpNNjQ0LjI4MyA5MS45MDVDNjUyLjc5IDkxLjkwNSA2NTkuNTk2IDkwLjc3MDggNjY0LjQxNiA4OC4zNjA1QzY2OC42NyA4Ni4yMzM4IDY3MS45MzEgODMuMjU2NCA2NzQuMDU4IDc5LjE0NDhDNjc2LjE4NSA3NS4xNzUgNjc3LjMxOSA2OS45MjkxIDY3Ny4zMTkgNjMuNjkwN0M2NzcuMzE5IDYwLjQyOTggNjc2Ljg5NCA1Ny40NTI1IDY3Ni4xODUgNTQuOTAwNEM2NzUuNDc2IDUyLjIwNjYgNjc0LjQ4MyA0OS45MzgxIDY3My4wNjUgNDcuOTUzMkM2NzEuNjQ3IDQ1Ljk2ODMgNjcwLjA4OCA0NC4xMjUxIDY2OC4xMDMgNDIuNzA3M0M2NjYuMTE4IDQxLjI4OTUgNjYzLjk5MSA0MC4wMTM1IDY2MS41ODEgMzkuMDIxMUM2NTkuMzEyIDM4LjE3MDQgNjU2Ljc2IDM3LjQ2MTUgNjU0LjA2NiAzNy4xNzc5QzY1MS4yMyAzNi43NTI2IDY0OC4xMTEgMzYuNjEwOCA2NDQuNzA4IDM2LjYxMDhINjM4LjMyOFY5MS45MDVINjQ0LjI4M1oiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTcwMC40MyAxMDQuMDk4VjI0LjI3NTlINzE1LjAzNFYxMDQuMDk4SDcwMC40M1oiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTc3Mi42IDgzLjgyMzhINzQyLjU0MUw3MzQuNzQzIDEwNC4yNEg3MTkuMTQ2TDc1MC45MDcgMjQuNDE4SDc2NC4yMzVMNzk1Ljk5NSAxMDQuMjRINzgwLjU0TDc3Mi42IDgzLjgyMzhaTTc1Ny40MjkgNDMuNDE2NUM3NTQuNTkzIDUxLjc4MTUgNzUyLjE4MyA1OC43Mjg3IDc0OS45MTQgNjQuMzk5OUw3NDcuMjIgNzEuNDg4OUg3NjcuOTIxTDc2NS4yMjcgNjQuMzk5OUM3NjMuMSA1OC43Mjg3IDc2MC41NDggNTEuNzgxNSA3NTcuNzEyIDQzLjQxNjVINzU3LjQyOVoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTgxNC41NjkgMjQuMjc1OVY5MS45MDVIODUyLjAwMVYxMDQuMDk4SDc5OS45NjVWMjQuMjc1OUg4MTQuNTY5WiIgZmlsbD0iI0Y3RjBFRCIvPgo8L3N2Zz4K";
 
 // ── Deep Dive recommendation logic ────────────────────────────────────────────
 function getDeepRecs(modId, groupLabel, score) {
@@ -2534,8 +2595,8 @@ function getDeepRecs(modId, groupLabel, score) {
       },
       "Comunicación & Coherencia": {
         lss: isCritical ? ["Estandarizar los mensajes clave del equipo directivo con frecuencia y formato definidos","I2E™ DECODE: identificar por qué los mensajes se distorsionan al bajar en la organización"] : ["Dashboard de comunicación interna con indicadores de penetración del mensaje"],
-        belbin: isCritical ? ["Identificar quién lidera la comunicación — Coordinador o Investigador de Recursos son ideales","Taller: 'Mensajes que mueven: cómo los roles Belbin impactan la comunicación'"] : ["Reforzar el rol de Cohesionador para asegurar consistencia del mensaje entre áreas"],
-        leadership: isCritical ? ["Programa de comunicación ejecutiva: claridad, consistencia y presencia","Taller: 'De la información a la inspiración: comunicación que genera acción'"] : ["Sesiones de alineación de mensajes antes de comunicaciones organizacionales clave"],
+        belbin: isCritical ? ["Identificar Investigador de Recursos y Cohesionador como facilitadores de la comunicación","Taller: 'Comunicación efectiva desde los roles: quién informa, quién conecta, quién cierra'"] : ["Programa de comunicación interna liderado por embajadores culturales"],
+        leadership: isCritical ? ["Programa de transparencia ejecutiva: 'Open book management'","Taller: 'Cómo los líderes construyen culturas de comunicación abierta'"] : ["Town halls regulares con espacio para preguntas difíciles"],
       },
       "Ejemplo & Valores": {
         lss: isCritical ? ["I2E™ OBSERVE: identificar brechas entre valores declarados y comportamientos observables","Auditoría de comportamientos directivos vs. valores organizacionales"] : ["I2E™ SUSTAIN: asegurar ownership de los valores con mecanismos de gobernanza visibles"],
@@ -2707,8 +2768,8 @@ function getDeepRecs(modId, groupLabel, score) {
 
 
 async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_MODULES, computeOPRI, computeDeep, checkL2, checkL3) {
-  var coreRR = allResponses.filter(function(r) { return r.survey === "core"; });
-  var fullRR = allResponses.filter(function(r) { return r.survey === "full"; });
+  var coreRR = getScoringResponses(allResponses, "core");
+  var fullRR = getScoringResponses(allResponses, "full");
   var coreScores = computeOPRI(coreRR, CORE_DIMS);
   var fullScores = computeOPRI(fullRR, FULL_DIMS);
   var l2 = checkL2(coreScores);
@@ -2973,6 +3034,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
   win.document.close();
 }
 
+var LOGO_B64 = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODU4IiBoZWlnaHQ9IjEyOSIgdmlld0JveD0iMCAwIDg1OCAxMjkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xMTguMTk1IDU0LjgxNzRMOTkuNDA4MyAzNi4wMzA4TDg3LjYwMDMgNDguNDQzM0wxMDkuMTg5IDQ4LjY1MDhMMTAxLjA2MyA2MC4xNzE5TDgwLjAzNTcgNTkuOTcwNEw3Ni44MzAzIDU5LjkzOTlMNjYuNDgxNSA1OS44NDIyVjI0LjI4MzlMNzcuNDUzIDE2LjczMTRWMzguMzQ0OEw4OS44Nzc3IDI2LjUwMDJMNzEuMTgyNyA3LjgwNTI0QzY2LjEwOTEgMi43MzE1OSA1Ny44OTExIDIuNzMxNTkgNTIuODE3NCA3LjgwNTI0TDM0LjAzMDkgMjYuNTkxOEw0Ni40NDMzIDM4LjM5OThMNDYuNjUwOSAxNi44MTA4TDU4LjE3MTkgMjQuOTM3Mkw1Ny45NzA0IDQ1Ljk2NDRMNTcuOTM5OSA0OS4xNjk4TDU3Ljg0MjIgNTkuNTE4NkgyMi4yODM5TDE0LjczMTQgNDguNTQ3SDM2LjM0NDhMMjQuNTAwMiAzNi4xMjI0TDUuODA1MjQgNTQuODE3NEMwLjczMTU4NyA1OS44OTEgMC43MzE1ODcgNjguMTE1MSA1LjgwNTI0IDczLjE4MjZMMjQuNTkxOCA5MS45NjkyTDM2LjM5OTggNzkuNTU2N0wxNC44MTA4IDc5LjM0OTJMMjIuOTM3MiA2Ny44MjgxTDQzLjk2NDUgNjguMDI5Nkw0Ny4xNjk5IDY4LjA2MDFMNTcuNTE4NiA2OC4xNTc4VjEwMy43MTZMNDYuNTQ3MSAxMTEuMjY5Vjg5LjY1NTJMMzQuMTIyNSAxMDEuNUw1Mi44MTc0IDEyMC4xOTVDNTcuODkxMSAxMjUuMjY4IDY2LjEwOTEgMTI1LjI2OCA3MS4xODI3IDEyMC4xOTVMODkuOTY5MiAxMDEuNDA4TDc3LjU1NjggODkuNjAwMkw3Ny4zNDkyIDExMS4xODlMNjUuODI4MiAxMDMuMDYzTDY2LjAyOTcgODIuMDM1Nkw2Ni4wNjAyIDc4LjgzMDJMNjYuMTU3OSA2OC40ODE0SDEwMS43MTZMMTA5LjI2OSA3OS40NTNIODcuNjU1M0w5OS40OTk5IDkxLjg3NzZMMTE4LjE5NSA3My4xODI2QzEyMy4yNjkgNjguMTA5IDEyMy4yNjkgNTkuODkxIDExOC4xOTUgNTQuODE3NFoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTE3My45NzcgNzMuMTlDMTcyLjcwMSA3My4xOSAxNzEuNDI1IDczLjE5IDE3MC4xNDkgNzMuMTlDMTY4Ljg3MyA3My4xOSAxNjcuNzM4IDczLjA0ODIgMTY2LjYwNCA3Mi45MDY1VjEwNC4wOThIMTUyVjI0LjI3NTlIMTc1LjExMUMxNzguOTM5IDI0LjI3NTkgMTgyLjM0MiAyNC40MTc3IDE4NS4xNzggMjQuODQzQzE4OC4wMTQgMjUuMjY4NCAxOTAuNzA4IDI1LjY5MzcgMTkyLjk3NiAyNi40MDI2QzE5OC4zNjQgMjguMTAzOSAyMDIuNjE4IDMwLjc5NzggMjA1LjU5NSAzNC4zNDIzQzIwOC41NzMgMzguMDI4NiAyMDkuOTkxIDQyLjcwNzMgMjA5Ljk5MSA0OC4zNzg1QzIwOS45OTEgNTIuMjA2NiAyMDkuMTQgNTUuNzUxMSAyMDcuNTggNTguNzI4NEMyMDYuMDIxIDYxLjg0NzYgMjAzLjYxIDY0LjM5OTYgMjAwLjYzMyA2Ni41MjYzQzE5Ny41MTMgNjguNjUzIDE5My44MjcgNzAuMzU0NCAxODkuNDMyIDcxLjQ4ODdDMTg0Ljg5NCA3Mi42MjI5IDE3OS43OSA3My4xOSAxNzMuOTc3IDczLjE5Wk0xNjYuNjA0IDYwLjU3MTZDMTY3LjQ1NSA2MC43MTM0IDE2OC40NDcgNjAuNzEzNCAxNjkuODY1IDYwLjg1NTFDMTcxLjE0MSA2MC44NTUxIDE3Mi41NTkgNjAuOTk3IDE3My44MzUgNjAuOTk3QzE3Ny44MDUgNjAuOTk3IDE4MS4wNjYgNjAuNzEzNCAxODMuNzYgNjAuMDA0NUMxODYuNDU0IDU5LjQzNzQgMTg4LjU4MSA1OC40NDQ5IDE5MC4xNDEgNTcuMzEwNkMxOTEuODQyIDU2LjE3NjQgMTkyLjk3NiA1NC43NTg2IDE5My42ODUgNTMuMTk5MUMxOTQuMzk0IDUxLjYzOTUgMTk0LjgxOSA0OS43OTYzIDE5NC44MTkgNDcuOTUzMkMxOTQuODE5IDQ1LjU0MjkgMTk0LjI1MiA0My41NTggMTkzLjI2IDQxLjg1NjdDMTkyLjEyNiA0MC4xNTUzIDE5MC4yODIgMzguODc5MyAxODcuNTg4IDM3Ljg4NjhDMTg2LjE3MSAzNy40NjE1IDE4NC40NjkgMzcuMDM2MSAxODIuNDg0IDM2Ljg5NDNDMTgwLjQ5OSAzNi42MTA4IDE3Ny45NDcgMzYuNjEwOCAxNzQuOTY5IDM2LjYxMDhIMTY2Ljc0NlY2MC41NzE2SDE2Ni42MDRaIiBmaWxsPSIjRjdGMEVEIi8+CjxwYXRoIGQ9Ik0yNzcuMTk3IDQ4LjIzN0MyNzcuMTk3IDUzLjc2NjQgMjc1LjYzOCA1OC41ODcgMjcyLjUxOSA2Mi40MTVDMjY5LjM5OSA2Ni4yNDMxIDI2NC43MiA2OS4yMjA0IDI1OC4xOTggNzEuMDYzNlY3MS4zNDcyTDI4Mi4wMTggMTA0LjI0SDI2NC40MzdMMjQyLjc0MyA3My4zMzIxSDIzMi42NzdWMTA0LjI0SDIxOC4wNzNWMjQuNDE4SDI0Mi4zMThDMjQ2LjI4OCAyNC40MTggMjUwLjExNiAyNC43MDE1IDI1My41MTkgMjUuMTI2OUMyNTYuOTIyIDI1LjU1MjIgMjU5LjkgMjYuMjYxMSAyNjIuNDUyIDI3LjI1MzZDMjY3LjEzMSAyOS4wOTY3IDI3MC44MTcgMzEuNjQ4NyAyNzMuMzY5IDM1LjE5MzJDMjc1LjkyMSAzOC40NTQyIDI3Ny4xOTcgNDIuOTkxMiAyNzcuMTk3IDQ4LjIzN1pNMjM5LjkwOCA2MC45OTcyQzI0My4zMTEgNjAuOTk3MiAyNDYuMTQ2IDYwLjg1NTUgMjQ4LjQxNSA2MC41NzE5QzI1MC42ODMgNjAuMjg4MyAyNTIuNjY4IDU5Ljg2MyAyNTQuMjI4IDU5LjI5NTlDMjU3LjIwNiA1OC4xNjE2IDI1OS4xOTEgNTYuNjAyIDI2MC4zMjUgNTQuNzU4OUMyNjEuNDU5IDUyLjc3MzkgMjYyLjAyNiA1MC42NDcyIDI2Mi4wMjYgNDguMDk1MkMyNjIuMDI2IDQ1Ljk2ODUgMjYxLjYwMSA0My45ODM2IDI2MC43NSA0Mi40MjRDMjU5LjkgNDAuNzIyNiAyNTguMzQgMzkuNDQ2NiAyNTYuMjEzIDM4LjQ1NDJDMjU0Ljc5NSAzNy43NDUzIDI1My4wOTQgMzcuMzE5OSAyNTAuOTY3IDM3LjAzNjRDMjQ4Ljg0IDM2Ljc1MjggMjQ2LjI4OCAzNi42MTEgMjQzLjE2OSAzNi42MTFIMjMyLjY3N1Y2MS4xMzlIMjM5LjkwOFY2MC45OTcyWiIgZmlsbD0iI0Y3RjBFRCIvPgo8cGF0aCBkPSJNMzYxLjg0MyA2NC4yNThDMzYxLjg0MyA3MC4zNTQ1IDM2MC45OTIgNzUuODgzOSAzNTkuMjkxIDgwLjk4OEMzNTcuNTkgODYuMDkyMSAzNTUuMDM3IDkwLjQ4NzMgMzUxLjc3NiA5NC4wMzE4QzM0OC41MTUgOTcuNzE4MSAzNDQuNDAzIDEwMC41NTQgMzM5LjU4MyAxMDIuNTM5QzMzNC43NjIgMTA0LjUyNCAzMjkuMjMyIDEwNS41MTYgMzIzLjEzNSAxMDUuNTE2QzMxNi44OTcgMTA1LjUxNiAzMTEuNTA5IDEwNC41MjQgMzA2LjY4OCAxMDIuNTM5QzMwMS44NjcgMTAwLjU1NCAyOTcuNzU2IDk3LjcxODEgMjk0LjQ5NSA5NC4wMzE4QzI5MS4yMzMgOTAuMzQ1NSAyODguNjgxIDg1Ljk1MDMgMjg2Ljk4IDgwLjk4OEMyODUuMjc4IDc1Ljg4MzkgMjg0LjQyOCA3MC4zNTQ1IDI4NC40MjggNjQuMjU4QzI4NC40MjggNTguMTYxNCAyODUuMjc4IDUyLjYzMiAyODYuOTggNDcuNTI3OUMyODguNjgxIDQyLjQyMzkgMjkxLjIzMyAzOC4wMjg3IDI5NC40OTUgMzQuNDg0MkMyOTcuNzU2IDMwLjc5NzkgMzAxLjg2NyAyNy45NjIzIDMwNi42ODggMjUuOTc3M0MzMTEuNTA5IDIzLjk5MjQgMzE3LjAzOSAyMyAzMjMuMTM1IDIzQzMyOS4zNzQgMjMgMzM0Ljc2MiAyMy45OTI0IDMzOS41ODMgMjUuOTc3M0MzNDQuNDAzIDI3Ljk2MjMgMzQ4LjUxNSAzMC43OTc5IDM1MS43NzYgMzQuNDg0MkMzNTUuMDM3IDM4LjE3MDQgMzU3LjU5IDQyLjU2NTYgMzU5LjI5MSA0Ny41Mjc5QzM2MC45OTIgNTIuNDkwMyAzNjEuODQzIDU4LjE2MTQgMzYxLjg0MyA2NC4yNThaTTM0Ni42NzIgNjQuMjU4QzM0Ni42NzIgNTkuNDM3NSAzNDYuMTA1IDU1LjE4NDEgMzQ0LjgyOSA1MS40OTc4QzM0My42OTUgNDcuODExNSAzNDEuOTkzIDQ0LjgzNDEgMzM5Ljg2NiA0Mi40MjM4QzMzNy43MzkgNDAuMDEzNSAzMzUuMTg3IDM4LjE3MDQgMzMyLjM1MiAzNy4wMzYyQzMyOS4zNzQgMzUuOTAxOSAzMjYuMjU1IDM1LjE5MzEgMzIyLjg1MiAzNS4xOTMxQzMxOS40NDkgMzUuMTkzMSAzMTYuMTg4IDM1Ljc2MDIgMzEzLjM1MiAzNy4wMzYyQzMxMC4zNzUgMzguMTcwNCAzMDcuOTY0IDQwLjAxMzUgMzA1LjgzOCA0Mi40MjM4QzMwMy43MTEgNDQuODM0MSAzMDIuMDA5IDQ3Ljk1MzMgMzAwLjg3NSA1MS40OTc4QzI5OS43NDEgNTUuMTg0MSAyOTkuMDMyIDU5LjQzNzUgMjk5LjAzMiA2NC4yNThDMjk5LjAzMiA2OS4wNzg1IDI5OS41OTkgNzMuMzMxOSAzMDAuODc1IDc3LjAxODJDMzAyLjAwOSA4MC43MDQ1IDMwMy43MTEgODMuNjgxOSAzMDUuODM4IDg2LjA5MjJDMzA3Ljk2NCA4OC41MDI0IDMxMC41MTYgOTAuMzQ1NiAzMTMuMzUyIDkxLjQ3OThDMzE2LjE4OCA5Mi43NTU4IDMxOS40NDkgOTMuMzIyOSAzMjIuODUyIDkzLjMyMjlDMzI2LjI1NSA5My4zMjI5IDMyOS41MTYgOTIuNzU1OCAzMzIuMzUyIDkxLjQ3OThDMzM1LjE4NyA5MC4yMDM4IDMzNy43MzkgODguNTAyNCAzMzkuODY2IDg2LjA5MjJDMzQxLjk5MyA4My42ODE5IDM0My42OTUgODAuNzA0NSAzNDQuODI5IDc3LjAxODJDMzQ2LjEwNSA3My4zMzE5IDM0Ni42NzIgNjkuMDc4NSAzNDYuNjcyIDY0LjI1OFoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTQxMS4wNDMgODIuNjg5MkM0MTIuNzQ1IDc2LjQ1MDkgNDE1LjAxMyA2OS42NDU1IDQxNy41NjUgNjIuNDE0N0w0MzEuMzE5IDI0LjEzNEg0NTEuODc4VjEwMy45NTZINDM3LjI3NFY2My40MDcxQzQzNy4yNzQgNTcuNDUyNCA0MzcuNTU3IDUwLjY0NjkgNDM3Ljk4MyA0Mi43MDcySDQzNy40MTVDNDM2LjcwNiA0NC45NzU3IDQzNS45OTggNDcuNTI3NyA0MzUuMDA1IDUwLjM2MzNDNDM0LjE1NCA1My4xOTkgNDMzLjE2MiA1Ni4wMzQ1IDQzMi4xNjkgNTguNzI4M0w0MTUuNTggMTAzLjgxNEg0MDYuMDgxTDM4OS40OTIgNTguNzI4M0MzODguNDk5IDU2LjAzNDUgMzg3LjUwNyA1My4xOTkgMzg2LjY1NiA1MC4zNjMzQzM4NS44MDUgNDcuNTI3NyAzODQuOTU0IDQ0Ljk3NTcgMzg0LjI0NSA0Mi43MDcySDM4My42NzhDMzg0LjEwNCA1MC4wNzk4IDM4NC4zODcgNTYuODg1MiAzODQuMzg3IDYzLjI2NTNWMTAzLjgxNEgzNjkuNzgzVjIzLjk5MjJIMzkwLjJMNDAzLjk1NCA2MS45ODkzQzQwNi4yMjIgNjguMzY5NCA0MDguNDkxIDc1LjE3NDggNDEwLjQ3NiA4Mi40MDU2SDQxMS4wNDNWODIuNjg5MloiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTQ5Ni42ODMgMTA1LjY1OEM0OTIuNTcxIDEwNS42NTggNDg4Ljc0MyAxMDUuMjMyIDQ4NS4zNCAxMDQuMzgyQzQ4MS45MzcgMTAzLjUzMSA0NzkuMTAxIDEwMi4zOTcgNDc2LjU0OSAxMDAuODM3QzQ3My45OTcgOTkuMjc3NyA0NzEuODcgOTcuNDM0NiA0NzAuMDI3IDk1LjE2NjFDNDY4LjE4NCA5Mi44OTc2IDQ2Ni43NjYgOTAuNDg3NCA0NjUuNzczIDg3LjY1MThDNDY0LjkyMyA4NS4zODMzIDQ2NC4yMTQgODIuOTczIDQ2My45MyA4MC4yNzkyQzQ2My41MDUgNzcuNTg1NCA0NjMuMzYzIDc0LjYwOCA0NjMuMzYzIDcxLjIwNTNWMjQuMTM0M0g0NzcuOTY3VjY5LjkyOTNDNDc3Ljk2NyA3NS42MDA1IDQ3OC42NzYgNzkuOTk1NiA0NzkuOTUyIDgzLjExNDhDNDgxLjUxMiA4Ni42NTkzIDQ4My42MzkgODkuMjExNCA0ODYuNjE2IDkwLjc3MUM0ODkuNDUyIDkyLjMzMDUgNDkyLjk5NiA5My4xODEyIDQ5Ni44MjUgOTMuMTgxMkM1MDAuNzk1IDkzLjE4MTIgNTA0LjE5OCA5Mi4zMzA1IDUwNy4wMzMgOTAuNzcxQzUwOS44NjkgODkuMjExNCA1MTIuMTM4IDg2LjY1OTMgNTEzLjY5NyA4My4xMTQ4QzUxNS4xMTUgNzkuOTk1NiA1MTUuNjgyIDc1LjQ1ODcgNTE1LjY4MiA2OS45MjkzVjI0LjEzNDNINTMwLjI4NlY3MS4yMDUzQzUzMC4yODYgNzQuNjA4IDUzMC4xNDQgNzcuNTg1NCA1MjkuNzE5IDgwLjI3OTJDNTI5LjI5NCA4Mi45NzMgNTI4LjcyNyA4NS41MjUxIDUyNy44NzYgODcuNjUxOEM1MjYuNzQyIDkwLjQ4NzQgNTI1LjMyNCA5Mi44OTc2IDUyMy40ODEgOTUuMTY2MUM1MjEuNjM3IDk3LjQzNDYgNTE5LjUxMSA5OS4yNzc3IDUxNi44MTcgMTAwLjgzN0M1MTQuMjY0IDEwMi4zOTcgNTExLjE0NSAxMDMuNTMxIDUwNy44ODQgMTA0LjM4MkM1MDQuNjIzIDEwNS4yMzIgNTAwLjkzNiAxMDUuNjU4IDQ5Ni42ODMgMTA1LjY1OFoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTU4My41OTcgNjEuNDIyM0M1ODkuMjY5IDY5LjY0NTUgNTkzLjk0OCA3Ni44NzYzIDU5Ny42MzQgODMuMTE0Nkg1OTguMDZDNTk3LjYzNCA3Mi43NjQ3IDU5Ny4zNTEgNjUuMTA4NiA1OTcuMzUxIDYwLjQyOThWMjQuMjc1OUg2MTEuOTU1VjEwNC4wOThINTk2LjY0Mkw1NzAuNTUzIDY3LjM3NzFDNTY2LjAxNiA2MC45OTcgNTYxLjE5NSA1My42MjQ0IDU1Ni4zNzQgNDUuMjU5M0g1NTUuODA3QzU1Ni4yMzMgNTUuMDQyMiA1NTYuNTE2IDYyLjY5ODMgNTU2LjUxNiA2Ny45NDQxVjEwNC4wOThINTQxLjkxMlYyNC4yNzU5SDU1Ny4yMjVMNTgzLjU5NyA2MS40MjIzWiIgZmlsbD0iI0Y3RjBFRCIvPgo8cGF0aCBkPSJNNjIzLjU4MiAxMDQuMDk4VjI0LjI3NTlINjQ0LjcwOEM2NDYuNTUxIDI0LjI3NTkgNjQ4LjUzNiAyNC4yNzU5IDY1MC4zNzkgMjQuNDE3N0M2NTIuMzY0IDI0LjU1OTUgNjU0LjIwOCAyNC43MDEyIDY1Ni4wNTEgMjQuOTg0OEM2NTcuODk0IDI1LjI2ODMgNjU5LjU5NiAyNS41NTIgNjYxLjI5NyAyNS44MzU1QzY2Mi45OTggMjYuMTE5MSA2NjQuNTU4IDI2LjU0NDQgNjY1Ljk3NiAyNy4xMTE1QzY3MC4yMyAyOC41MjkzIDY3NC4wNTggMzAuMjMwNyA2NzcuMzE5IDMyLjY0MDlDNjgwLjU4IDM0LjkwOTQgNjgzLjI3NCAzNy43NDUgNjg1LjU0MyA0MC44NjQyQzY4Ny44MTEgNDMuOTgzMyA2ODkuMzcxIDQ3LjUyNzkgNjkwLjUwNSA1MS4zNTU5QzY5MS42MzkgNTUuMTg0IDY5Mi4yMDYgNTkuNDM3NCA2OTIuMjA2IDYzLjk3NDNDNjkyLjIwNiA2OC4yMjc3IDY5MS43ODEgNzIuMzM5NCA2OTAuNzg5IDc2LjAyNTZDNjg5Ljc5NiA3OS44NTM3IDY4OC4zNzggODMuMjU2NCA2ODYuMzkzIDg2LjM3NTZDNjg0LjQwOCA4OS40OTQ3IDY4MS45OTggOTIuMTg4NiA2NzkuMDIgOTQuNTk4OUM2NzYuMDQzIDk3LjAwOTIgNjcyLjQ5OCA5OC44NTIzIDY2OC41MjggMTAwLjQxMkM2NjUuMTI1IDEwMS42ODggNjYxLjI5NyAxMDIuNjggNjU3LjA0MyAxMDMuMjQ3QzY1Mi43OSAxMDMuOTU2IDY0Ny45NjkgMTA0LjI0IDY0Mi41ODEgMTA0LjI0SDYyMy41ODJWMTA0LjA5OFpNNjQ0LjI4MyA5MS45MDVDNjUyLjc5IDkxLjkwNSA2NTkuNTk2IDkwLjc3MDggNjY0LjQxNiA4OC4zNjA1QzY2OC42NyA4Ni4yMzM4IDY3MS45MzEgODMuMjU2NCA2NzQuMDU4IDc5LjE0NDhDNjc2LjE4NSA3NS4xNzUgNjc3LjMxOSA2OS45MjkxIDY3Ny4zMTkgNjMuNjkwN0M2NzcuMzE5IDYwLjQyOTggNjc2Ljg5NCA1Ny40NTI1IDY3Ni4xODUgNTQuOTAwNEM2NzUuNDc2IDUyLjIwNjYgNjc0LjQ4MyA0OS45MzgxIDY3My4wNjUgNDcuOTUzMkM2NzEuNjQ3IDQ1Ljk2ODMgNjcwLjA4OCA0NC4xMjUxIDY2OC4xMDMgNDIuNzA3M0M2NjYuMTE4IDQxLjI4OTUgNjYzLjk5MSA0MC4wMTM1IDY2MS41ODEgMzkuMDIxMUM2NTkuMzEyIDM4LjE3MDQgNjU2Ljc2IDM3LjQ2MTUgNjU0LjA2NiAzNy4xNzc5QzY1MS4yMyAzNi43NTI2IDY0OC4xMTEgMzYuNjEwOCA2NDQuNzA4IDM2LjYxMDhINjM4LjMyOFY5MS45MDVINjQ0LjI4M1oiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTcwMC40MyAxMDQuMDk4VjI0LjI3NTlINzE1LjAzNFYxMDQuMDk4SDcwMC40M1oiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTc3Mi42IDgzLjgyMzhINzQyLjU0MUw3MzQuNzQzIDEwNC4yNEg3MTkuMTQ2TDc1MC45MDcgMjQuNDE4SDc2NC4yMzVMNzk1Ljk5NSAxMDQuMjRINzgwLjU0TDc3Mi42IDgzLjgyMzhaTTc1Ny40MjkgNDMuNDE2NUM3NTQuNTkzIDUxLjc4MTUgNzUyLjE4MyA1OC43Mjg3IDc0OS45MTQgNjQuMzk5OUw3NDcuMjIgNzEuNDg4OUg3NjcuOTIxTDc2NS4yMjcgNjQuMzk5OUM3NjMuMSA1OC43Mjg3IDc2MC41NDggNTEuNzgxNSA3NTcuNzEyIDQzLjQxNjVINzU3LjQyOVoiIGZpbGw9IiNGN0YwRUQiLz4KPHBhdGggZD0iTTgxNC41NjkgMjQuMjc1OVY5MS45MDVIODUyLjAwMVYxMDQuMDk4SDc5OS45NjVWMjQuMjc1OVoiIGZpbGw9IiNGN0YwRUQiLz4KPC9zdmc+Cg==";
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 function PublicApp() {
@@ -3001,8 +3063,8 @@ function PublicApp() {
 
   useEffect(function() { loadData(); }, [loadData]);
 
-  const coreRR  = responses.filter(function(r) { return r.survey === "core"; });
-  const fullRR  = responses.filter(function(r) { return r.survey === "full"; });
+  const coreRR  = getScoringResponses(responses, "core");
+  const fullRR  = getScoringResponses(responses, "full");
   const coreScores = computeOPRI(coreRR, CORE_DIMS);
   const fullScores = computeOPRI(fullRR, FULL_DIMS);
   const l2 = checkL2(coreScores);
