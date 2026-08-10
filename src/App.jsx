@@ -2304,19 +2304,24 @@ function gaugeHTML(score, color, size) {
 
 
 // ── Bar chart ─────────────────────────────────────────────────────────────────
+// MBB-style: monochrome bars (charcoal), maturity shown as a small text label,
+// not as a colored fill — color is reserved for meaning (a dot), not decoration.
 function barHTML(dims, scores) {
   var bars = dims.map(function(d) {
     var sc = scores.dimScores[d.id];
     var m = sc != null ? getM(sc) : null;
     var meta = DIM_META[d.id];
     var pct = sc != null ? (sc / 5 * 100).toFixed(1) : 0;
-    return '<div style="margin-bottom:10px">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">' +
-        '<span style="font-size:11px;color:' + CHARCOAL + ';font-weight:600">' + meta.es + ' <span style="color:#999;font-weight:400;font-size:10px">/ ' + meta.en + '</span></span>' +
-        '<span style="font-size:13px;font-weight:700;color:' + (m ? m.color : MUTED) + '">' + (sc != null ? sc.toFixed(2) : '—') + '</span>' +
+    return '<div style="margin-bottom:14px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">' +
+        '<span style="font-size:11px;color:' + CHARCOAL + ';font-weight:600">' + meta.es + ' <span style="color:#9CA3AF;font-weight:400;font-size:10px">/ ' + meta.en + '</span></span>' +
+        '<span style="display:flex;align-items:baseline;gap:6px">' +
+          (m ? '<span style="width:6px;height:6px;border-radius:50%;background:' + m.color + ';display:inline-block"></span>' : '') +
+          '<span style="font-family:Georgia,serif;font-size:15px;font-weight:700;color:' + CHARCOAL + '">' + (sc != null ? sc.toFixed(2) : '—') + '</span>' +
+        '</span>' +
       '</div>' +
-      '<div style="background:#E5E7EB;border-radius:99px;height:8px;overflow:hidden">' +
-        '<div style="width:' + pct + '%;height:100%;background:' + (m ? m.color : '#ccc') + ';border-radius:99px;transition:width 0.4s"></div>' +
+      '<div style="background:#EDEDED;height:3px">' +
+        '<div style="width:' + pct + '%;height:100%;background:' + CHARCOAL + '"></div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -2324,27 +2329,50 @@ function barHTML(dims, scores) {
 }
 
 // ── PAI table ─────────────────────────────────────────────────────────────────
+// MBB-style: horizontal rules only, no zebra striping, no colored pill badges —
+// state is conveyed with a small dot + plain text, not a colored background.
 function paiTableHTML(dims, scores) {
   var rows = dims.map(function(d) {
     var p = scores.paiByDim[d.id];
     var meta = DIM_META[d.id];
     var band = p && p.gap != null ? getPAI(p.gap) : null;
-    return '<tr style="border-bottom:1px solid #F3F4F6">' +
-      '<td style="padding:8px 10px;font-size:12px;color:' + CHARCOAL + ';font-weight:600">' + meta.es + '</td>' +
-      '<td style="padding:8px 10px;text-align:center;font-size:12px;color:' + meta.color + ';font-weight:700">' + (p && p.ls != null ? p.ls.toFixed(2) : '—') + '</td>' +
-      '<td style="padding:8px 10px;text-align:center;font-size:12px;color:' + MUTED + '">' + (p && p.os != null ? p.os.toFixed(2) : '—') + '</td>' +
-      '<td style="padding:8px 10px;text-align:center;font-size:13px;font-weight:700;color:' + (band ? band.color : MUTED) + '">' + (p && p.gap != null ? p.gap.toFixed(2) : '—') + '</td>' +
-      '<td style="padding:8px 10px;text-align:center"><span style="font-size:9px;font-weight:700;background:' + (band ? band.color : MUTED) + '22;color:' + (band ? band.color : MUTED) + ';padding:2px 8px;border-radius:99px">' + (band ? band.es : '—') + '</span></td>' +
+    return '<tr style="border-bottom:1px solid #E5E5E5">' +
+      '<td style="padding:9px 10px;font-size:12px;color:' + CHARCOAL + ';font-weight:600">' + meta.es + '</td>' +
+      '<td style="padding:9px 10px;text-align:center;font-size:12px;font-family:Georgia,serif;color:' + CHARCOAL + '">' + (p && p.ls != null ? p.ls.toFixed(2) : '—') + '</td>' +
+      '<td style="padding:9px 10px;text-align:center;font-size:12px;font-family:Georgia,serif;color:' + CHARCOAL + '">' + (p && p.os != null ? p.os.toFixed(2) : '—') + '</td>' +
+      '<td style="padding:9px 10px;text-align:center;font-size:13px;font-weight:700;font-family:Georgia,serif;color:' + CHARCOAL + '">' + (p && p.gap != null ? p.gap.toFixed(2) : '—') + '</td>' +
+      '<td style="padding:9px 10px;text-align:left"><span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:' + MUTED + '">' + (band ? '<span style="width:6px;height:6px;border-radius:50%;background:' + band.color + ';display:inline-block;flex-shrink:0"></span>' + band.es : '—') + '</span></td>' +
     '</tr>';
   }).join('');
   return '<table style="width:100%;border-collapse:collapse">' +
-    '<thead><tr style="background:#F9F9F7">' +
-      '<th style="padding:8px 10px;text-align:left;font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em">Dimensión</th>' +
-      '<th style="padding:8px 10px;text-align:center;font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em">Liderazgo</th>' +
-      '<th style="padding:8px 10px;text-align:center;font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em">Organización</th>' +
-      '<th style="padding:8px 10px;text-align:center;font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em">GAP</th>' +
-      '<th style="padding:8px 10px;text-align:center;font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em">Estado</th>' +
+    '<thead><tr style="border-bottom:1.5px solid ' + CHARCOAL + '">' +
+      '<th style="padding:8px 10px;text-align:left;font-size:9px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.08em;font-weight:600">Dimensión</th>' +
+      '<th style="padding:8px 10px;text-align:center;font-size:9px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.08em;font-weight:600">Liderazgo</th>' +
+      '<th style="padding:8px 10px;text-align:center;font-size:9px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.08em;font-weight:600">Organización</th>' +
+      '<th style="padding:8px 10px;text-align:center;font-size:9px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.08em;font-weight:600">GAP</th>' +
+      '<th style="padding:8px 10px;text-align:left;font-size:9px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.08em;font-weight:600">Estado</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+// ── PAI explainer (static, human-written — no API call needed for this one) ──
+function paiExplainer(scores) {
+  var dims = Object.keys(scores.paiByDim).map(function(id) {
+    return Object.assign({ id: id }, scores.paiByDim[id]);
+  }).filter(function(p) { return p.gap != null; });
+  if (dims.length === 0) {
+    return "El PAI™ mide qué tan distinta es la lectura de la organización según el nivel jerárquico de quien responde: compara el promedio de las respuestas del Comité Ejecutivo y Directores/Gerentes contra el de Supervisores y Colaboradores, dimensión por dimensión. Un gap alto no dice quién tiene razón — dice que ambos grupos están operando con información o experiencias distintas, lo cual suele ser en sí mismo parte del problema.";
+  }
+  dims.sort(function(a, b) { return b.gap - a.gap; });
+  var widest = dims[0];
+  var widestMeta = DIM_META[widest.id];
+  var leaderHigher = widest.ls > widest.os;
+  var direction = leaderHigher
+    ? "el liderazgo la percibe considerablemente mejor de lo que la vive el resto de la organización"
+    : "el resto de la organización la percibe mejor de lo que reconoce el propio liderazgo";
+  var implication = leaderHigher
+    ? "eso normalmente significa que hay una historia que se cuenta arriba y una que se vive abajo, y ninguna intervención va a funcionar si primero no se cierra esa distancia de información"
+    : "es un patrón menos común, y suele indicar que el equipo está compensando o resolviendo por su cuenta problemas que el liderazgo todavía no ve como tales";
+  return "El PAI™ compara cómo ve cada dimensión el Comité Ejecutivo y Directores/Gerentes frente a cómo la ve el resto de la organización. La brecha más amplia aquí está en " + widestMeta.es + " (" + widest.gap.toFixed(2) + " puntos): " + direction + ". En la práctica, " + implication + ".";
 }
 
 // ── Recommendation logic ──────────────────────────────────────────────────────
@@ -2793,35 +2821,62 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
   // ── Call Claude API for AI interpretations ──
   var win = window.open("", "_blank");
-  win.document.write('<html><body style="font-family:sans-serif;padding:40px;text-align:center;color:#6B7280"><h2 style="color:#1B4332">Generando reporte OPRI™...</h2><p>Consultando inteligencia artificial · Por favor espere</p><div style="font-size:32px;margin-top:20px">⏳</div></body></html>');
+  win.document.write('<html><body style="font-family:sans-serif;padding:40px;text-align:center;color:#6B7280"><h2 style="color:#1B4332">Generando reporte OPRI™...</h2><p>Redactando el análisis narrativo · Por favor espere (puede tomar un minuto)</p><div style="font-size:32px;margin-top:20px">⏳</div></body></html>');
 
   var aiInterpretations = {};
   try {
-    var dimContext = mainDims.map(function(d) {
+    // Build rich per-dimension context: score, maturity, PAI gap (if any),
+    // and the actual recommended tools (so the model explains THESE, not generic ones).
+    var dimContextBlocks = mainDims.map(function(d) {
       var sc = mainScores.dimScores[d.id];
       var meta = DIM_META[d.id];
-      return meta.en + " (" + meta.es + "): " + (sc != null ? sc.toFixed(2) : "N/A") + "/5.00";
-    }).join(", ");
+      var mat = sc != null ? getM(sc) : null;
+      var p = mainScores.paiByDim ? mainScores.paiByDim[d.id] : null;
+      var recs = getRecommendations(d.id, sc || 0);
+      var gapLine = "";
+      if (p && p.gap != null) {
+        var whoHigher = p.ls > p.os ? "leadership rates it higher than the rest of the organization" : (p.os > p.ls ? "the rest of the organization rates it higher than leadership" : "leadership and the organization rate it the same");
+        gapLine = "Perception gap: leadership=" + p.ls.toFixed(2) + ", organization=" + p.os.toFixed(2) + " (gap=" + p.gap.toFixed(2) + ", " + whoHigher + ").";
+      }
+      return "DIMENSION: " + meta.en + " (" + meta.es + ")\n" +
+        "Score: " + (sc != null ? sc.toFixed(2) : "N/A") + "/5.00 — " + (mat ? mat.en + "/" + mat.es : "N/A") + "\n" +
+        gapLine + "\n" +
+        "Recommended tools for THIS dimension at THIS score level (explain the rationale for 2-3 of these, don't just list them):\n" +
+        "  Lean/Six Sigma & I2E™: " + recs.lss.slice(0,3).join(" | ") + "\n" +
+        "  Belbin Team Roles: " + recs.belbin.slice(0,3).join(" | ") + "\n" +
+        "  Leadership: " + recs.leadership.slice(0,3).join(" | ");
+    }).join("\n\n");
 
-    var prompt = "You are an expert organizational consultant from Promundial Consulting Group specializing in Operational Excellence, Lean Six Sigma, Belbin Team Roles, and Leadership Development.\n\n" +
-      "Company: " + eng.company + "\n" +
-      "OPRI™ Score: " + mainScores.opri.toFixed(2) + "/5.00 (" + getM(mainScores.opri).en + ")\n" +
+    var prompt = "You are a senior partner at Promundial Consulting Group writing the narrative section of an OPRI™ diagnostic report for a client's leadership team. The bar for this document is a report from McKinsey or Bain — not an AI-generated summary, not a generic consulting deck. That means specific things about how it reads, not just how it sounds.\n\n" +
+      "CLIENT: " + eng.company + "\n" +
+      "OPRI™ overall score: " + mainScores.opri.toFixed(2) + "/5.00 (" + getM(mainScores.opri).en + ")\n" +
       "Respondents: " + mainScores.n + "\n" +
-      "Dimension scores: " + dimContext + "\n" +
-      (mainScores.paiGlobal != null ? "PAI™ (Perception Alignment Index): " + mainScores.paiGlobal.toFixed(2) + " (" + getPAI(mainScores.paiGlobal).en + ")\n" : "") +
-      "\nGenerate a bilingual (Spanish/English) executive interpretation for each dimension. For each, write:\n" +
-      "- 2-3 sentences in Spanish describing the organizational reality implied by the score\n" +
-      "- 2-3 sentences in English describing the same\n" +
-      "Also write a 3-sentence executive summary in Spanish and English about the overall organizational health.\n\n" +
-      "Respond ONLY with valid JSON in this exact format:\n" +
+      (mainScores.paiGlobal != null ? "PAI™ (Perception Alignment Index, gap between leadership's and the organization's perception): " + mainScores.paiGlobal.toFixed(2) + " (" + getPAI(mainScores.paiGlobal).en + ")\n" : "") +
+      "\n" + dimContextBlocks + "\n\n" +
+      "WRITING TASK — for EACH of the 5 dimensions above, write a bilingual (Spanish and English) narrative of 5 to 8 sentences that does THREE things in flowing prose (not bullet points, not headers):\n" +
+      "1. States the finding as a diagnostic claim, not an observation — the MBB move is 'X is happening because of Y, and it's costing you Z', not 'there are some challenges around X'. Be concrete about the mechanism: what is actually happening operationally when this score is what it is.\n" +
+      "2. If there is a perception gap, treat it as evidence, not decoration — say what the direction of the gap implies about where the organization's real problem sits (e.g., a leadership-high gap usually means a message is being sent that isn't landing, which is itself the finding).\n" +
+      "3. Justifies WHY 2-3 of the specific recommended tools listed above are the right lever — name the mechanism (what the tool actually changes structurally) and tie it explicitly back to the finding in point 1, the way a firm ties a recommendation back to its root-cause analysis. Reference each tool by its real name once, inside a sentence — never as a bolted-on list.\n\n" +
+      "REGISTER — this is what separates MBB from an AI summary or a generic consulting report. Concretely:\n" +
+      "- Lead with the finding, not the setup. Every paragraph's first sentence should be able to stand alone as the headline of that dimension — that's the pyramid principle: conclusion first, support after.\n" +
+      "- Be precise, not verbose. MBB prose is economical — short declarative sentences carrying real content, not long sentences padded with qualifiers. Cut any sentence that doesn't add new information.\n" +
+      "- State findings with authority. No 'it seems', 'this may suggest', 'could indicate' — say what the data shows and what it means, full stop. Confidence is calibrated to the evidence you were given, not hedged out of politeness.\n" +
+      "- Use the actual numbers as evidence inside sentences ('a 2.1 on Execution, against a 4.0 on Alignment, means the organization knows what to do and is failing to do it') — not as a data dump, but as the proof point for the claim being made.\n" +
+      "- Avoid both AI-report clichés ('in today's dynamic business environment', 'leverage', 'holistic', 'robust framework', 'foster a culture of') AND consulting-buzzword filler ('synergy', 'drive value', 'best-in-class', 'move the needle') — real MBB writing is plainer and sharper than the stereotype of consulting-speak.\n" +
+      "- Vary sentence length and paragraph shape across the 5 dimensions — five identically-structured paragraphs reads like a template, which is exactly what this should not feel like.\n" +
+      "- Be willing to be blunt in the weak dimensions. A 2.1 gets plain, direct language about what's broken — softening it would be doing the client a disservice, and MBB firms don't do that.\n" +
+      "- Write Spanish and English as two independently composed texts in their own natural business register (Spanish: Ecuador/Latin America), not a translation of one into the other.\n\n" +
+      "Also write a 4-5 sentence executive summary (Spanish and English) written as a governing thought, MBB-style: open with the single most important finding across the whole diagnostic — the one thing that, if the leadership team internalizes nothing else, they should internalize this — then briefly support it with the one or two data points that prove it.\n\n" +
+      "Respond ONLY with valid JSON, no markdown fences, in this exact shape:\n" +
       '{"summary_es":"...","summary_en":"...","dims":{"alignment":{"es":"...","en":"..."},"execution":{"es":"...","en":"..."},"leadership":{"es":"...","en":"..."},"resilience":{"es":"...","en":"..."},"culture":{"es":"...","en":"..."}}}';
+
 
     var resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 2000,
+        max_tokens: 8000,
         messages: [{ role: "user", content: prompt }]
       })
     });
@@ -2847,37 +2902,61 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     var m = sc != null ? getM(sc) : null;
     var aiDim = aiInterpretations.dims && aiInterpretations.dims[d.id] ? aiInterpretations.dims[d.id] : { es: "", en: "" };
     var recs = getRecommendations(d.id, sc || 0);
-    return '<div style="page-break-inside:avoid;margin-bottom:32px;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden">' +
-      '<div style="background:' + meta.color + '18;border-left:4px solid ' + meta.color + ';padding:14px 18px;display:flex;align-items:center;gap:12px">' +
-        '<span style="font-size:20px">' + meta.icon + '</span>' +
-        '<div style="flex:1">' +
-          '<div style="font-size:14px;font-weight:700;color:' + CHARCOAL + '">' + meta.es + '</div>' +
-          '<div style="font-size:11px;color:' + MUTED + '">' + meta.en + '</div>' +
+    return '<div style="page-break-inside:avoid;margin-bottom:36px;border-top:2px solid ' + CHARCOAL + ';padding-top:14px">' +
+      '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">' +
+        '<div>' +
+          '<div style="font-size:15px;font-weight:700;color:' + CHARCOAL + '">' + meta.es + '</div>' +
+          '<div style="font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em;margin-top:1px">' + meta.en + '</div>' +
         '</div>' +
-        '<div style="text-align:right">' +
-          '<div style="font-size:22px;font-weight:700;color:' + (m ? m.color : MUTED) + ';font-family:Georgia,serif">' + (sc != null ? sc.toFixed(2) : '—') + '</div>' +
-          '<span style="font-size:9px;font-weight:700;background:' + (m ? m.color : MUTED) + ';color:white;padding:2px 8px;border-radius:99px">' + (m ? m.es : '—') + '</span>' +
+        '<div style="text-align:right;flex-shrink:0">' +
+          '<span style="font-family:Georgia,serif;font-size:28px;font-weight:700;color:' + CHARCOAL + '">' + (sc != null ? sc.toFixed(2) : '—') + '</span>' +
+          (m ? '<div style="font-size:9px;color:' + m.color + ';font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">' + m.es + '</div>' : '') +
         '</div>' +
       '</div>' +
-      '<div style="padding:16px 18px">' +
-        (aiDim.es ? '<p style="font-size:12px;color:' + CHARCOAL + ';line-height:1.7;margin:0 0 6px 0"><strong>ES:</strong> ' + aiDim.es + '</p>' : '') +
-        (aiDim.en ? '<p style="font-size:12px;color:' + MUTED + ';line-height:1.7;margin:0 0 14px 0"><strong>EN:</strong> ' + aiDim.en + '</p>' : '') +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px">' +
-          recBlock("🔧 LSS / I2E™ Innovation-to-Execution", recs.lss, "#EFF6FF", BLUE) +
-          recBlock("👥 Belbin Team Roles", recs.belbin, "#F5F3FF", VIOLET) +
-          recBlock("🎯 Leadership Excellence", recs.leadership, "#F0FDF4", GREEN) +
-        '</div>' +
+      (aiDim.es ? '<p style="font-size:13px;color:' + CHARCOAL + ';line-height:1.85;margin:0 0 12px 0">' + aiDim.es + '</p>' : '') +
+      (aiDim.en ? '<p style="font-size:12px;color:' + MUTED + ';line-height:1.8;margin:0 0 20px 0;font-style:italic;border-left:2px solid #E5E5E5;padding-left:12px">' + aiDim.en + '</p>' : '') +
+      '<div style="font-size:9px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.08em;margin:0 0 10px;font-weight:700">Herramientas de referencia</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0;border-top:1px solid #E5E5E5">' +
+        recBlock("LSS / I2E™ Innovation-to-Execution", recs.lss) +
+        recBlock("Belbin Team Roles", recs.belbin) +
+        recBlock("Leadership Excellence", recs.leadership) +
       '</div>' +
     '</div>';
   }).join('');
 
-  function recBlock(title, items, bg, color) {
-    return '<div style="background:' + bg + ';border-radius:8px;padding:12px">' +
-      '<div style="font-size:10px;font-weight:700;color:' + color + ';margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">' + title + '</div>' +
-      '<ul style="margin:0;padding-left:14px">' +
-        items.map(function(i) { return '<li style="font-size:11px;color:' + CHARCOAL + ';line-height:1.6;margin-bottom:4px">' + i + '</li>'; }).join('') +
+  // MBB-style reference block: no colored background, no icon — a plain
+  // bordered column with a small-caps label and a minimal dash list.
+  function recBlock(title, items) {
+    return '<div style="padding:12px 14px 4px 0;border-right:1px solid #F0F0F0">' +
+      '<div style="font-size:9px;font-weight:700;color:' + CHARCOAL + ';margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">' + title + '</div>' +
+      '<ul style="margin:0;padding:0;list-style:none">' +
+        items.map(function(i) { return '<li style="font-size:11px;color:' + MUTED + ';line-height:1.65;margin-bottom:6px;padding-left:12px;position:relative"><span style="position:absolute;left:0;color:' + CHARCOAL + '">–</span>' + i + '</li>'; }).join('') +
       '</ul>' +
     '</div>';
+  }
+
+  // Short, human, non-AI-sounding connector sentences that explain WHY the
+  // tools below are being suggested for this specific Deep Dive group —
+  // templated (not a per-group API call) to keep report generation fast and
+  // affordable, but varied enough not to feel robotic across 40 groups.
+  function deepWhySentence(modName, groupLabel, sc) {
+    var band = sc < 2.5 ? "crit" : sc < 3.2 ? "vuln" : "stable";
+    var variants = {
+      crit: [
+        "Un resultado de " + sc.toFixed(2) + " en " + groupLabel + " no es un matiz — es una señal de que esto se vive como un problema recurrente dentro de " + modName + ", y por eso las líneas de abajo apuntan a intervenir directamente, no a ajustar en el margen.",
+        "Con " + sc.toFixed(2) + ", " + groupLabel + " está entre los puntos más débiles de " + modName + " en esta organización; las herramientas sugeridas aquí están pensadas para casos así, donde el patrón ya es visible y sostenido, no ocasional.",
+      ],
+      vuln: [
+        groupLabel + " se ubica en zona vulnerable (" + sc.toFixed(2) + ") dentro de " + modName + " — todavía no es crítico, pero es el tipo de brecha que se agranda si nadie la atiende a propósito; de ahí estas recomendaciones.",
+        "Un " + sc.toFixed(2) + " en " + groupLabel + " sugiere que el problema aparece de forma intermitente más que sistemática dentro de " + modName + ", lo que abre la puerta a intervenciones más ligeras antes de que se vuelva estructural.",
+      ],
+      stable: [
+        groupLabel + " ya está en un nivel razonable (" + sc.toFixed(2) + ") dentro de " + modName + ", así que estas sugerencias son más sobre consolidar y escalar lo que ya funciona que sobre corregir algo roto.",
+      ],
+    };
+    var opts = variants[band];
+    var idx = (groupLabel.length + Math.round(sc * 100)) % opts.length;
+    return opts[idx];
   }
 
   // Deep Dive sections
@@ -2898,34 +2977,40 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       var recs = sc != null ? getDeepRecs(m.id, g.label, sc) : null;
       var recsHtml = '';
       if (recs && sc < 3.5) {
-        recsHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-top:10px;padding:10px;background:#F9F9F7;border-radius:8px">' +
-          recBlock("🔧 LSS / I2E™", recs.lss.slice(0,2), "#EFF6FF", BLUE) +
-          recBlock("👥 Belbin", recs.belbin.slice(0,2), "#F5F3FF", VIOLET) +
-          recBlock("🎯 Leadership", recs.leadership.slice(0,2), "#F0FDF4", GREEN) +
+        recsHtml = '<div style="margin-top:10px;padding-left:14px;border-left:2px solid #E5E5E5">' +
+          '<p style="font-size:11px;color:' + CHARCOAL + ';line-height:1.6;margin:0 0 10px 0">' + deepWhySentence(m.fullName, g.label, sc) + '</p>' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0">' +
+            recBlock("LSS / I2E™", recs.lss.slice(0,2)) +
+            recBlock("Belbin", recs.belbin.slice(0,2)) +
+            recBlock("Leadership", recs.leadership.slice(0,2)) +
+          '</div>' +
         '</div>';
       }
-      return '<div style="margin-bottom:' + (recsHtml ? '14' : '8') + 'px;padding-bottom:' + (recsHtml ? '14' : '0') + 'px;border-bottom:1px solid #F3F4F6">' +
-        '<div style="display:flex;justify-content:space-between;margin-bottom:3px">' +
+      return '<div style="margin-bottom:' + (recsHtml ? '16' : '10') + 'px;padding-bottom:' + (recsHtml ? '16' : '10') + 'px;border-bottom:1px solid #EEEEEE">' +
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">' +
           '<span style="font-size:12px;color:' + CHARCOAL + ';font-weight:600">' + g.label + '</span>' +
-          '<span style="font-size:12px;font-weight:700;color:' + (mat ? mat.color : MUTED) + '">' + (sc != null ? sc.toFixed(2) : '—') + (mat ? ' · <span style="font-size:9px;font-weight:700">' + mat.es + '</span>' : '') + '</span>' +
+          '<span style="display:flex;align-items:baseline;gap:6px">' +
+            (mat ? '<span style="font-size:9px;color:' + mat.color + ';font-weight:700;text-transform:uppercase">' + mat.es + '</span>' : '') +
+            '<span style="font-family:Georgia,serif;font-size:13px;font-weight:700;color:' + CHARCOAL + '">' + (sc != null ? sc.toFixed(2) : '—') + '</span>' +
+          '</span>' +
         '</div>' +
-        '<div style="background:#E5E7EB;border-radius:99px;height:6px;margin-bottom:2px"><div style="width:' + pct + '%;height:100%;background:' + (mat ? mat.color : m.color) + ';border-radius:99px"></div></div>' +
+        '<div style="background:#EDEDED;height:3px"><div style="width:' + pct + '%;height:100%;background:' + CHARCOAL + '"></div></div>' +
         recsHtml +
       '</div>';
     }).join('');
 
-    return '<div style="page-break-inside:avoid;margin-bottom:28px;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden">' +
-      '<div style="background:' + m.color + ';padding:14px 18px;display:flex;align-items:center;justify-content:space-between">' +
+    return '<div style="page-break-inside:avoid;margin-bottom:32px;border-top:2px solid ' + CHARCOAL + ';padding-top:14px">' +
+      '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">' +
         '<div>' +
-          '<div style="font-size:12px;color:rgba(255,255,255,0.8);font-weight:600">' + m.index + '</div>' +
-          '<div style="font-size:16px;font-weight:700;color:white">' + m.fullName + '</div>' +
+          '<div style="font-size:10px;color:' + MUTED + ';font-weight:600;text-transform:uppercase;letter-spacing:0.06em">' + m.index + '</div>' +
+          '<div style="font-size:15px;font-weight:700;color:' + CHARCOAL + '">' + m.fullName + '</div>' +
         '</div>' +
         '<div style="text-align:right">' +
-          '<div style="font-size:28px;font-weight:700;color:white;font-family:Georgia,serif">' + (deepSc.globalScore != null ? deepSc.globalScore.toFixed(2) : '—') + '</div>' +
-          '<div style="font-size:10px;color:rgba(255,255,255,0.8)">' + deepSc.n + ' respondentes</div>' +
+          '<span style="font-family:Georgia,serif;font-size:22px;font-weight:700;color:' + CHARCOAL + '">' + (deepSc.globalScore != null ? deepSc.globalScore.toFixed(2) : '—') + '</span>' +
+          '<div style="font-size:10px;color:' + MUTED + '">' + deepSc.n + ' respondentes</div>' +
         '</div>' +
       '</div>' +
-      '<div style="padding:16px 18px">' + groupBars + '</div>' +
+      groupBars +
     '</div>';
   }).join('');
 
@@ -2934,12 +3019,12 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     var meta = DIM_META[x.dim.id];
     var m = getM(x.score);
     var priority = i === 0 ? "Prioridad 1 — Intervención Inmediata" : i === 1 ? "Prioridad 2 — Intervención a 60 días" : "Prioridad 3 — Intervención a 90 días";
-    return '<div style="display:flex;gap:12px;margin-bottom:12px;page-break-inside:avoid">' +
-      '<div style="width:28px;height:28px;border-radius:50%;background:' + m.color + ';color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">' + (i+1) + '</div>' +
-      '<div style="flex:1;border:1px solid #E5E7EB;border-radius:8px;padding:10px 14px">' +
-        '<div style="font-size:10px;color:' + m.color + ';font-weight:700;text-transform:uppercase;margin-bottom:2px">' + priority + '</div>' +
-        '<div style="font-size:13px;font-weight:700;color:' + CHARCOAL + '">' + meta.es + ' — ' + x.score.toFixed(2) + '</div>' +
-        '<div style="font-size:11px;color:' + MUTED + ';margin-top:4px">' + meta.en + '</div>' +
+    return '<div style="display:flex;gap:14px;margin-bottom:14px;page-break-inside:avoid">' +
+      '<div style="width:26px;height:26px;border:1.5px solid ' + CHARCOAL + ';color:' + CHARCOAL + ';display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;font-family:Georgia,serif">' + (i+1) + '</div>' +
+      '<div style="flex:1;border-bottom:1px solid #E5E5E5;padding-bottom:12px">' +
+        '<div style="font-size:9px;color:' + MUTED + ';font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px">' + priority + '</div>' +
+        '<div style="font-size:13px;font-weight:700;color:' + CHARCOAL + '">' + meta.es + ' <span style="font-family:Georgia,serif;font-weight:700">— ' + x.score.toFixed(2) + '</span></div>' +
+        '<div style="font-size:11px;color:' + MUTED + ';margin-top:3px">' + meta.en + '</div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -2952,7 +3037,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       '@media print{.no-print{display:none!important}body{font-size:11px}@page{margin:15mm}}' +
       '.page{max-width:900px;margin:0 auto;padding:0 32px 48px}@media(max-width:600px){.page{padding:0 12px 32px}h2{font-size:20px!important}}' +
       'h2{font-family:"Cormorant Garamond",serif;font-weight:600;margin:0 0 4px 0}' +
-      '.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:' + MUTED + ';margin:28px 0 12px 0;padding-bottom:6px;border-bottom:2px solid ' + GOLD + '}' +
+      '.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:' + CHARCOAL + ';margin:32px 0 14px 0;padding-bottom:7px;border-bottom:1.5px solid ' + CHARCOAL + '}' +
     '</style></head><body>' +
 
     // Print button
@@ -2967,46 +3052,44 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
     '<div class="page">' +
 
-    // Cover
-    '<div style="background:linear-gradient(135deg,' + GREEN + ',' + GREEN_MID + ');border-radius:12px;padding:40px;margin:28px 0 24px;color:white">' +
-      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px"><img src="' + LOGO_B64 + '" style="height:40px;width:auto" alt="Promundial"/><div style="font-size:9px;letter-spacing:0.15em;color:' + GOLD + ';text-transform:uppercase;line-height:1.6">Promundial Consulting Group<br>OPRI™ Enterprise Edition</div></div>' +
-      '<h2 style="font-size:36px;color:white;margin:0 0 6px 0">' + eng.company + '</h2>' +
-      '<div style="font-size:14px;color:rgba(255,255,255,0.8);margin-bottom:24px">Organizational Performance & Resilience Index™ · Reporte Ejecutivo</div>' +
-      '<div style="display:flex;gap:20px;flex-wrap:wrap">' +
-        '<div><div style="font-size:10px;color:' + GOLD + ';text-transform:uppercase;letter-spacing:0.08em">OPRI™ Score</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:42px;font-weight:700;line-height:1">' + mainScores.opri.toFixed(2) + '</div><div style="font-size:11px;color:' + maturity.color + ';background:rgba(255,255,255,0.15);padding:2px 10px;border-radius:99px;display:inline-block;font-weight:700">' + maturity.es + ' / ' + maturity.en + '</div></div>' +
-        '<div style="border-left:1px solid rgba(255,255,255,0.2);padding-left:20px"><div style="font-size:10px;color:' + GOLD + ';text-transform:uppercase;letter-spacing:0.08em">Respondentes</div><div style="font-size:28px;font-weight:700">' + mainScores.n + '</div></div>' +
-        (mainScores.paiGlobal != null ? '<div style="border-left:1px solid rgba(255,255,255,0.2);padding-left:20px"><div style="font-size:10px;color:' + GOLD + ';text-transform:uppercase;letter-spacing:0.08em">PAI™</div><div style="font-size:28px;font-weight:700">' + mainScores.paiGlobal.toFixed(2) + '</div><div style="font-size:11px;color:rgba(255,255,255,0.7)">' + getPAI(mainScores.paiGlobal).es + '</div></div>' : '') +
-        '<div style="border-left:1px solid rgba(255,255,255,0.2);padding-left:20px"><div style="font-size:10px;color:' + GOLD + ';text-transform:uppercase;letter-spacing:0.08em">Consultor</div><div style="font-size:16px;font-weight:600">' + (eng.consultant || 'Promundial') + '</div><div style="font-size:11px;color:rgba(255,255,255,0.7)">' + date + '</div></div>' +
+    // Cover — brand identity stays (dark green, logo), but the stat row below
+    // it drops the colored pill badges and decorative dividers for a plainer,
+    // editorial title-page treatment.
+    '<div style="background:' + GREEN + ';padding:44px 40px;margin:28px 0 0;color:white">' +
+      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:22px"><img src="' + LOGO_B64 + '" style="height:36px;width:auto" alt="Promundial"/><div style="font-size:9px;letter-spacing:0.15em;color:' + GOLD + ';text-transform:uppercase;line-height:1.6">Promundial Consulting Group<br>OPRI™ Enterprise Edition</div></div>' +
+      '<h2 style="font-size:34px;color:white;margin:0 0 6px 0;font-weight:600">' + eng.company + '</h2>' +
+      '<div style="font-size:13px;color:rgba(255,255,255,0.65);margin-bottom:30px">Organizational Performance & Resilience Index™ · Reporte Ejecutivo · ' + date + '</div>' +
+      '<div style="display:flex;gap:36px;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,0.18);padding-top:20px">' +
+        '<div><div style="font-size:9px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px">OPRI™ Score</div><div style="font-family:Georgia,serif;font-size:36px;font-weight:700;line-height:1;color:white">' + mainScores.opri.toFixed(2) + '</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:3px">' + maturity.es + ' / ' + maturity.en + '</div></div>' +
+        '<div><div style="font-size:9px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px">Respondentes</div><div style="font-family:Georgia,serif;font-size:36px;font-weight:700;color:white">' + mainScores.n + '</div></div>' +
+        (mainScores.paiGlobal != null ? '<div><div style="font-size:9px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px">PAI™</div><div style="font-family:Georgia,serif;font-size:36px;font-weight:700;color:white">' + mainScores.paiGlobal.toFixed(2) + '</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:3px">' + getPAI(mainScores.paiGlobal).es + '</div></div>' : '') +
+        '<div><div style="font-size:9px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px">Consultor</div><div style="font-size:15px;font-weight:600;color:white">' + (eng.consultant || 'Promundial') + '</div></div>' +
       '</div>' +
     '</div>' +
 
-    // Executive Summary
-    '<div class="section-title">Resumen Ejecutivo / Executive Summary</div>' +
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:24px">' +
-      '<div style="background:#F8F4EC;border-radius:8px;padding:16px;border-left:3px solid ' + GOLD + '">' +
-        '<div style="font-size:10px;font-weight:700;color:' + GOLD + ';text-transform:uppercase;margin-bottom:6px">Español</div>' +
-        '<p style="font-size:13px;line-height:1.7;margin:0;color:' + CHARCOAL + '">' + (aiInterpretations.summary_es || '') + '</p>' +
-      '</div>' +
-      '<div style="background:#F0F7FF;border-radius:8px;padding:16px;border-left:3px solid ' + BLUE + '">' +
-        '<div style="font-size:10px;font-weight:700;color:' + BLUE + ';text-transform:uppercase;margin-bottom:6px">English</div>' +
-        '<p style="font-size:13px;line-height:1.7;margin:0;color:' + CHARCOAL + '">' + (aiInterpretations.summary_en || '') + '</p>' +
-      '</div>' +
+    // Executive Summary — single "governing finding" box, MBB-style: a plain
+    // white panel with a black top rule, not two colored side-by-side cards.
+    '<div style="border-top:3px solid ' + CHARCOAL + ';padding:20px 0 4px;margin-top:0">' +
+      '<div style="font-size:9px;font-weight:700;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px">Hallazgo Principal / Governing Finding</div>' +
+      '<p style="font-size:14px;line-height:1.85;margin:0 0 16px 0;color:' + CHARCOAL + '">' + (aiInterpretations.summary_es || '') + '</p>' +
+      '<p style="font-size:12px;line-height:1.8;margin:0 0 8px 0;color:' + MUTED + ';font-style:italic;border-left:2px solid #E5E5E5;padding-left:14px">' + (aiInterpretations.summary_en || '') + '</p>' +
     '</div>' +
 
     // Scores overview
     '<div class="section-title">Perfil de Capacidades / Capability Profile</div>' +
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;align-items:start;margin-bottom:24px">' +
-      '<div>' + gaugeHTML(mainScores.opri, maturity.color, 140) + '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:24px;align-items:start;margin-bottom:8px">' +
+      '<div>' + gaugeHTML(mainScores.opri, CHARCOAL, 140) + '</div>' +
       '<div>' + barHTML(mainDims, mainScores) + '</div>' +
     '</div>' +
 
     // PAI
     (mainScores.paiGlobal != null ? '<div class="section-title">PAI™ — Perception Alignment Index</div>' +
     '<div style="margin-bottom:24px">' +
-      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
-        '<div style="font-family:\'Cormorant Garamond\',serif;font-size:32px;font-weight:600;color:' + getPAI(mainScores.paiGlobal).color + '">' + mainScores.paiGlobal.toFixed(2) + '</div>' +
+      '<div style="display:flex;align-items:baseline;gap:14px;margin-bottom:14px">' +
+        '<div style="font-family:Georgia,serif;font-size:30px;font-weight:700;color:' + CHARCOAL + '">' + mainScores.paiGlobal.toFixed(2) + '</div>' +
         '<div><div style="font-size:11px;color:' + CHARCOAL + ';font-weight:600">' + getPAI(mainScores.paiGlobal).es + ' / ' + getPAI(mainScores.paiGlobal).en + '</div><div style="font-size:11px;color:' + MUTED + '">Gap promedio entre Liderazgo y Organización</div></div>' +
       '</div>' +
+      '<p style="font-size:12px;color:' + CHARCOAL + ';line-height:1.75;margin:0 0 16px 0">' + paiExplainer(mainScores) + '</p>' +
       paiTableHTML(mainDims, mainScores) +
     '</div>' : '') +
 
@@ -3021,10 +3104,12 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     '<div class="section-title">Roadmap de Intervención / Intervention Roadmap</div>' +
     '<div style="margin-bottom:24px">' + roadmapItems + '</div>' +
 
-    // Footer
-    '<div style="border-top:2px solid ' + GOLD + ';padding-top:16px;display:flex;justify-content:space-between;align-items:center;margin-top:32px">' +
-      '<div style="display:flex;align-items:center;gap:8px"><img src="' + LOGO_B64 + '" style="height:28px;width:auto" alt="Promundial"/></div>' +
-      '<div style="font-size:10px;color:' + MUTED + ';text-align:right">OPRI™ Enterprise Edition · Confidencial · ' + date + '<br>© ' + new Date().getFullYear() + ' Promundial Consulting Group · All rights reserved</div>' +
+    // Footer — logo asset is a light/cream fill (designed for the dark green
+    // cover), so on this white footer it needs a small dark chip behind it
+    // to stay visible rather than disappearing into the page.
+    '<div style="border-top:1px solid #E5E5E5;padding-top:16px;display:flex;justify-content:space-between;align-items:center;margin-top:32px">' +
+      '<div style="background:' + GREEN + ';padding:6px 10px;display:inline-flex;align-items:center"><img src="' + LOGO_B64 + '" style="height:16px;width:auto" alt="Promundial"/></div>' +
+      '<div style="font-size:9px;color:' + MUTED + ';text-align:right">OPRI™ Enterprise Edition · Confidencial · ' + date + '<br>© ' + new Date().getFullYear() + ' Promundial Consulting Group · All rights reserved</div>' +
     '</div>' +
 
     '</div></body></html>';
