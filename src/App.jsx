@@ -2991,7 +2991,13 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       var pct = sc != null ? (sc / 5 * 100).toFixed(1) : 0;
       var recs = sc != null ? getDeepRecs(m.id, g.label, sc) : null;
       var recsHtml = '';
-      if (recs && sc < 3.5) {
+      // Umbral alineado a la banda de madurez real (Estable termina en 3.8,
+      // no en 3.5) — así cualquier grupo que el lector vea etiquetado como
+      // "ESTABLE" o peor siempre trae explicación y herramientas; solo
+      // "Alto Desempeño" / "World Class" las omiten. Antes el corte en 3.5
+      // partía la banda Estable a la mitad, dejando algunos grupos con el
+      // mismo rótulo con texto y otros sin él.
+      if (recs && sc < 3.8) {
         recsHtml = '<div style="margin-top:10px;padding-left:14px;border-left:2px solid #E5E5E5">' +
           '<p style="font-size:11px;color:' + CHARCOAL + ';line-height:1.6;margin:0 0 10px 0">' + deepWhySentence(m.fullName, g.label, sc) + '</p>' +
           '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0">' +
