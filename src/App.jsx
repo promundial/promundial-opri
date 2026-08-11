@@ -2828,6 +2828,26 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
   win.document.body.innerHTML = '<div style="font-family:sans-serif;padding:40px;text-align:center;color:#6B7280"><h2 style="color:#1B4332">Generando reporte OPRI™...</h2><p>Redactando el análisis narrativo · Por favor espere (puede tomar un minuto)</p><div style="font-size:32px;margin-top:20px">⏳</div></div>';
 
   var aiInterpretations = {};
+  var narrativeError = null;
+
+  // Helper: one attempt at calling the narrative endpoint + parsing its JSON.
+  // Throws on any failure (network, non-2xx, invalid JSON) so the caller can
+  // retry or fall back.
+  async function tryGenerateNarrative(promptText) {
+    var resp = await fetch("/api/generate-narrative", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: promptText, max_tokens: 8000 })
+    });
+    var data = await resp.json();
+    if (!resp.ok) {
+      throw new Error((data && data.error) ? JSON.stringify(data.error) : "HTTP " + resp.status);
+    }
+    var text = data.content && data.content[0] ? data.content[0].text : "";
+    text = text.replace(/```json|```/g, "").trim();
+    return JSON.parse(text);
+  }
+
   try {
     // Build rich per-dimension context: score, maturity, PAI gap (if any),
     // and the actual recommended tools (so the model explains THESE, not generic ones).
@@ -2874,35 +2894,25 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       "Respond ONLY with valid JSON, no markdown fences, in this exact shape:\n" +
       '{"summary_es":"...","summary_en":"...","dims":{"alignment":{"es":"...","en":"..."},"execution":{"es":"...","en":"..."},"leadership":{"es":"...","en":"..."},"resilience":{"es":"...","en":"..."},"culture":{"es":"...","en":"..."}}}';
 
-
     // Llamamos a nuestro propio endpoint serverless (/api/generate-narrative),
-    // NO directo a api.anthropic.com — el navegador no puede autenticar esa
-    // llamada de forma segura y Anthropic bloquea CORS desde el cliente.
-    // El endpoint vive en el servidor con la API key en una variable de entorno.
-    var resp = await fetch("/api/generate-narrative", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt: prompt,
-        max_tokens: 8000,
-      })
-    });
-    var data = await resp.json();
-    if (!resp.ok) {
-      throw new Error((data && data.error) ? JSON.stringify(data.error) : "Error generando narrativa (HTTP " + resp.status + ")");
+    // NO directo a api.anthropic.com. Un reintento: llamadas a LLM pueden
+    // fallar de forma transitoria (timeout, rate limit, JSON no perfectamente
+    // válido) — antes de caer al texto de respaldo, lo intentamos una segunda vez.
+    try {
+      aiInterpretations = await tryGenerateNarrative(prompt);
+    } catch (firstErr) {
+      console.warn("Primer intento de narrativa falló, reintentando…", firstErr);
+      aiInterpretations = await tryGenerateNarrative(prompt);
     }
-    var text = data.content && data.content[0] ? data.content[0].text : "";
-    text = text.replace(/```json|```/g, "").trim();
-    aiInterpretations = JSON.parse(text);
   } catch(e) {
-    console.error("Narrativa OPRI™ no disponible, usando texto de respaldo:", e);
+    console.error("Narrativa OPRI™ no disponible tras reintentar, usando texto de respaldo:", e);
+    narrativeError = (e && e.message) ? e.message : String(e);
     aiInterpretations = {
       summary_es: "El análisis OPRI™ revela áreas críticas de atención que requieren intervención inmediata por parte del equipo directivo.",
       summary_en: "The OPRI™ analysis reveals critical areas requiring immediate attention from the leadership team.",
       dims: {}
     };
   }
-
   // ── Build HTML report ──────────────────────────────────────────────────────
   var date = new Date().toLocaleDateString("es-ES", { year: "numeric", month: "long", day: "numeric" });
   var maturity = getM(mainScores.opri);
@@ -3084,6 +3094,13 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     // white panel with a black top rule, not two colored side-by-side cards.
     '<div style="border-top:3px solid ' + CHARCOAL + ';padding:20px 0 4px;margin-top:0">' +
       '<div style="font-size:9px;font-weight:700;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px">Hallazgo Principal / Governing Finding</div>' +
+      // Banner de diagnóstico interno: solo aparece si la narrativa con IA
+      // falló y se usó el texto de respaldo. Pensado para que el consultor
+      // vea el motivo sin abrir herramientas de desarrollador — bórralo
+      // manualmente (Ctrl/Cmd+F "AVISO INTERNO" en el HTML) antes de enviar
+      // el reporte al cliente, o simplemente regenera el reporte si el
+      // reintento automático tampoco funcionó.
+      (narrativeError ? '<div class="no-print" style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:#991B1B"><strong>⚠ AVISO INTERNO (no visible al imprimir):</strong> la narrativa con IA falló incluso tras reintentar, así que este reporte quedó con el texto de respaldo genérico en el resumen y sin párrafos por dimensión. Error: ' + String(narrativeError).replace(/</g,"&lt;") + '. Intenta generar el reporte de nuevo — si vuelve a fallar, revisa la variable ANTHROPIC_API_KEY en Vercel.</div>' : '') +
       '<p style="font-size:14px;line-height:1.85;margin:0 0 16px 0;color:' + CHARCOAL + '">' + (aiInterpretations.summary_es || '') + '</p>' +
       '<p style="font-size:12px;line-height:1.8;margin:0 0 8px 0;color:' + MUTED + ';font-style:italic;border-left:2px solid #E5E5E5;padding-left:14px">' + (aiInterpretations.summary_en || '') + '</p>' +
     '</div>' +
