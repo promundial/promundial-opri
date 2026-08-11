@@ -2314,7 +2314,7 @@ function barHTML(dims, scores) {
     var pct = sc != null ? (sc / 5 * 100).toFixed(1) : 0;
     return '<div style="margin-bottom:14px">' +
       '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">' +
-        '<span style="font-size:11px;color:' + CHARCOAL + ';font-weight:600">' + meta.es + ' <span style="color:#9CA3AF;font-weight:400;font-size:10px">/ ' + meta.en + '</span></span>' +
+        '<span style="font-size:11px;color:' + CHARCOAL + ';font-weight:600">' + meta.es + '</span>' +
         '<span style="display:flex;align-items:baseline;gap:6px">' +
           (m ? '<span style="width:6px;height:6px;border-radius:50%;background:' + m.color + ';display:inline-block"></span>' : '') +
           '<span style="font-family:Georgia,serif;font-size:15px;font-weight:700;color:' + CHARCOAL + '">' + (sc != null ? sc.toFixed(2) : '—') + '</span>' +
@@ -2856,8 +2856,8 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
         var whoHigher = p.ls > p.os ? "leadership rates it higher than the rest of the organization" : (p.os > p.ls ? "the rest of the organization rates it higher than leadership" : "leadership and the organization rate it the same");
         gapLine = "Perception gap: leadership=" + p.ls.toFixed(2) + ", organization=" + p.os.toFixed(2) + " (gap=" + p.gap.toFixed(2) + ", " + whoHigher + ").";
       }
-      return "DIMENSION: " + meta.en + " (" + meta.es + ")\n" +
-        "Score: " + (sc != null ? sc.toFixed(2) : "N/A") + "/5.00 — " + (mat ? mat.en + "/" + mat.es : "N/A") + "\n" +
+      return "DIMENSION: " + meta.es + "\n" +
+        "Score: " + (sc != null ? sc.toFixed(2) : "N/A") + "/5.00 — " + (mat ? mat.es : "N/A") + "\n" +
         gapLine + "\n" +
         "Recommended tools for THIS dimension at THIS score level (explain the rationale for 2-3 of these, don't just list them):\n" +
         "  Lean/Six Sigma & I2E™: " + recs.lss.slice(0,3).join(" | ") + "\n" +
@@ -2867,11 +2867,11 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
     var prompt = "You are a senior partner at Promundial Consulting Group writing the narrative section of an OPRI™ diagnostic report for a client's leadership team. The bar for this document is a report from McKinsey or Bain — not an AI-generated summary, not a generic consulting deck. That means specific things about how it reads, not just how it sounds.\n\n" +
       "CLIENT: " + eng.company + "\n" +
-      "OPRI™ overall score: " + mainScores.opri.toFixed(2) + "/5.00 (" + getM(mainScores.opri).en + ")\n" +
+      "OPRI™ overall score: " + mainScores.opri.toFixed(2) + "/5.00 (" + getM(mainScores.opri).es + ")\n" +
       "Respondents: " + mainScores.n + "\n" +
-      (mainScores.paiGlobal != null ? "PAI™ (Perception Alignment Index, gap between leadership's and the organization's perception): " + mainScores.paiGlobal.toFixed(2) + " (" + getPAI(mainScores.paiGlobal).en + ")\n" : "") +
+      (mainScores.paiGlobal != null ? "PAI™ (gap de percepción entre liderazgo y organización): " + mainScores.paiGlobal.toFixed(2) + " (" + getPAI(mainScores.paiGlobal).es + ")\n" : "") +
       "\n" + dimContextBlocks + "\n\n" +
-      "WRITING TASK — for EACH of the 5 dimensions above, write a bilingual (Spanish and English) narrative of 5 to 8 sentences that does THREE things in flowing prose (not bullet points, not headers):\n" +
+      "WRITING TASK — for EACH of the 5 dimensions above, write a narrative IN SPANISH ONLY of 5 to 8 sentences that does THREE things in flowing prose (not bullet points, not headers):\n" +
       "1. States the finding as a diagnostic claim, not an observation — the MBB move is 'X is happening because of Y, and it's costing you Z', not 'there are some challenges around X'. Be concrete about the mechanism: what is actually happening operationally when this score is what it is.\n" +
       "2. If there is a perception gap, treat it as evidence, not decoration — say what the direction of the gap implies about where the organization's real problem sits (e.g., a leadership-high gap usually means a message is being sent that isn't landing, which is itself the finding).\n" +
       "3. Justifies WHY 2-3 of the specific recommended tools listed above are the right lever — name the mechanism (what the tool actually changes structurally) and tie it explicitly back to the finding in point 1, the way a firm ties a recommendation back to its root-cause analysis. Reference each tool by its real name once, inside a sentence — never as a bolted-on list.\n\n" +
@@ -2883,10 +2883,10 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       "- Avoid both AI-report clichés ('in today's dynamic business environment', 'leverage', 'holistic', 'robust framework', 'foster a culture of') AND consulting-buzzword filler ('synergy', 'drive value', 'best-in-class', 'move the needle') — real MBB writing is plainer and sharper than the stereotype of consulting-speak.\n" +
       "- Vary sentence length and paragraph shape across the 5 dimensions — five identically-structured paragraphs reads like a template, which is exactly what this should not feel like.\n" +
       "- Be willing to be blunt in the weak dimensions. A 2.1 gets plain, direct language about what's broken — softening it would be doing the client a disservice, and MBB firms don't do that.\n" +
-      "- Write Spanish and English as two independently composed texts in their own natural business register (Spanish: Ecuador/Latin America), not a translation of one into the other.\n\n" +
-      "Also write a 4-5 sentence executive summary (Spanish and English) written as a governing thought, MBB-style: open with the single most important finding across the whole diagnostic — the one thing that, if the leadership team internalizes nothing else, they should internalize this — then briefly support it with the one or two data points that prove it.\n\n" +
+      "- Write in natural Spanish business register (Ecuador/Latin America) — this is the ONLY language needed, do not include any English text anywhere in the output.\n\n" +
+      "Also write a 4-5 sentence executive summary IN SPANISH ONLY, written as a governing thought, MBB-style: open with the single most important finding across the whole diagnostic — the one thing that, if the leadership team internalizes nothing else, they should internalize this — then briefly support it with the one or two data points that prove it.\n\n" +
       "Respond ONLY with valid JSON, no markdown fences, in this exact shape:\n" +
-      '{"summary_es":"...","summary_en":"...","dims":{"alignment":{"es":"...","en":"..."},"execution":{"es":"...","en":"..."},"leadership":{"es":"...","en":"..."},"resilience":{"es":"...","en":"..."},"culture":{"es":"...","en":"..."}}}';
+      '{"summary_es":"...","dims":{"alignment":{"es":"..."},"execution":{"es":"..."},"leadership":{"es":"..."},"resilience":{"es":"..."},"culture":{"es":"..."}}}';
 
 
     // Llamamos a nuestro propio endpoint serverless (/api/generate-narrative),
@@ -2904,7 +2904,6 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     narrativeError = (e && e.message) ? e.message : String(e);
     aiInterpretations = {
       summary_es: "El análisis OPRI™ revela áreas críticas de atención que requieren intervención inmediata por parte del equipo directivo.",
-      summary_en: "The OPRI™ analysis reveals critical areas requiring immediate attention from the leadership team.",
       dims: {}
     };
   }
@@ -2918,21 +2917,19 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     var sc = mainScores.dimScores[d.id];
     var meta = DIM_META[d.id];
     var m = sc != null ? getM(sc) : null;
-    var aiDim = aiInterpretations.dims && aiInterpretations.dims[d.id] ? aiInterpretations.dims[d.id] : { es: "", en: "" };
+    var aiDim = aiInterpretations.dims && aiInterpretations.dims[d.id] ? aiInterpretations.dims[d.id] : { es: "" };
     var recs = getRecommendations(d.id, sc || 0);
     return '<div style="page-break-inside:avoid;margin-bottom:36px;border-top:2px solid ' + CHARCOAL + ';padding-top:14px">' +
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">' +
         '<div>' +
           '<div style="font-size:15px;font-weight:700;color:' + CHARCOAL + '">' + meta.es + '</div>' +
-          '<div style="font-size:10px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.06em;margin-top:1px">' + meta.en + '</div>' +
         '</div>' +
         '<div style="text-align:right;flex-shrink:0">' +
           '<span style="font-family:Georgia,serif;font-size:28px;font-weight:700;color:' + CHARCOAL + '">' + (sc != null ? sc.toFixed(2) : '—') + '</span>' +
           (m ? '<div style="font-size:9px;color:' + m.color + ';font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">' + m.es + '</div>' : '') +
         '</div>' +
       '</div>' +
-      (aiDim.es ? '<p style="font-size:13px;color:' + CHARCOAL + ';line-height:1.85;margin:0 0 12px 0">' + aiDim.es + '</p>' : '') +
-      (aiDim.en ? '<p style="font-size:12px;color:' + MUTED + ';line-height:1.8;margin:0 0 20px 0;font-style:italic;border-left:2px solid #E5E5E5;padding-left:12px">' + aiDim.en + '</p>' : '') +
+      (aiDim.es ? '<p style="font-size:13px;color:' + CHARCOAL + ';line-height:1.85;margin:0 0 20px 0">' + aiDim.es + '</p>' : '') +
       '<div style="font-size:9px;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.08em;margin:0 0 10px;font-weight:700">Herramientas de referencia</div>' +
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0;border-top:1px solid #E5E5E5">' +
         recBlock("LSS / I2E™ Innovation-to-Execution", recs.lss) +
@@ -3042,7 +3039,6 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       '<div style="flex:1;border-bottom:1px solid #E5E5E5;padding-bottom:12px">' +
         '<div style="font-size:9px;color:' + MUTED + ';font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px">' + priority + '</div>' +
         '<div style="font-size:13px;font-weight:700;color:' + CHARCOAL + '">' + meta.es + ' <span style="font-family:Georgia,serif;font-weight:700">— ' + x.score.toFixed(2) + '</span></div>' +
-        '<div style="font-size:11px;color:' + MUTED + ';margin-top:3px">' + meta.en + '</div>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -3091,7 +3087,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       '<h2 style="font-size:34px;color:white;margin:0 0 6px 0;font-weight:600">' + eng.company + '</h2>' +
       '<div style="font-size:13px;color:rgba(255,255,255,0.65);margin-bottom:30px">Organizational Performance & Resilience Index™ · Reporte Ejecutivo · ' + date + '</div>' +
       '<div style="display:flex;gap:36px;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,0.18);padding-top:20px">' +
-        '<div><div style="font-size:9px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px">OPRI™ Score</div><div style="font-family:Georgia,serif;font-size:36px;font-weight:700;line-height:1;color:white">' + mainScores.opri.toFixed(2) + '</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:3px">' + maturity.es + ' / ' + maturity.en + '</div></div>' +
+        '<div><div style="font-size:9px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px">OPRI™ Score</div><div style="font-family:Georgia,serif;font-size:36px;font-weight:700;line-height:1;color:white">' + mainScores.opri.toFixed(2) + '</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:3px">' + maturity.es + '</div></div>' +
         '<div><div style="font-size:9px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px">Respondentes</div><div style="font-family:Georgia,serif;font-size:36px;font-weight:700;color:white">' + mainScores.n + '</div></div>' +
         (mainScores.paiGlobal != null ? '<div><div style="font-size:9px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px">PAI™</div><div style="font-family:Georgia,serif;font-size:36px;font-weight:700;color:white">' + mainScores.paiGlobal.toFixed(2) + '</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:3px">' + getPAI(mainScores.paiGlobal).es + '</div></div>' : '') +
         '<div><div style="font-size:9px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px">Consultor</div><div style="font-size:15px;font-weight:600;color:white">' + (eng.consultant || 'Promundial') + '</div></div>' +
@@ -3101,39 +3097,38 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     // Executive Summary — single "governing finding" box, MBB-style: a plain
     // white panel with a black top rule, not two colored side-by-side cards.
     '<div style="border-top:3px solid ' + CHARCOAL + ';padding:20px 0 4px;margin-top:0">' +
-      '<div style="font-size:9px;font-weight:700;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px">Hallazgo Principal / Governing Finding</div>' +
+      '<div style="font-size:9px;font-weight:700;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px">Hallazgo Principal</div>' +
       (narrativeError ? '<div class="no-print" style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:#991B1B"><strong>⚠ AVISO INTERNO (no visible al imprimir):</strong> la narrativa con IA falló incluso tras reintentar, así que este reporte quedó con el texto de respaldo genérico en el resumen y sin párrafos por dimensión. Error: ' + String(narrativeError).replace(/</g,"&lt;") + '. Intenta generar el reporte de nuevo.</div>' : '') +
-      '<p style="font-size:14px;line-height:1.85;margin:0 0 16px 0;color:' + CHARCOAL + '">' + (aiInterpretations.summary_es || '') + '</p>' +
-      '<p style="font-size:12px;line-height:1.8;margin:0 0 8px 0;color:' + MUTED + ';font-style:italic;border-left:2px solid #E5E5E5;padding-left:14px">' + (aiInterpretations.summary_en || '') + '</p>' +
+      '<p style="font-size:14px;line-height:1.85;margin:0 0 8px 0;color:' + CHARCOAL + '">' + (aiInterpretations.summary_es || '') + '</p>' +
     '</div>' +
 
     // Scores overview
-    '<div class="section-title">Perfil de Capacidades / Capability Profile</div>' +
+    '<div class="section-title">Perfil de Capacidades</div>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:24px;align-items:start;margin-bottom:8px">' +
       '<div>' + gaugeHTML(mainScores.opri, CHARCOAL, 140) + '</div>' +
       '<div>' + barHTML(mainDims, mainScores) + '</div>' +
     '</div>' +
 
     // PAI
-    (mainScores.paiGlobal != null ? '<div class="section-title">PAI™ — Perception Alignment Index</div>' +
+    (mainScores.paiGlobal != null ? '<div class="section-title">PAI™ — Índice de Alineación de Percepción</div>' +
     '<div style="margin-bottom:24px">' +
       '<div style="display:flex;align-items:baseline;gap:14px;margin-bottom:14px">' +
         '<div style="font-family:Georgia,serif;font-size:30px;font-weight:700;color:' + CHARCOAL + '">' + mainScores.paiGlobal.toFixed(2) + '</div>' +
-        '<div><div style="font-size:11px;color:' + CHARCOAL + ';font-weight:600">' + getPAI(mainScores.paiGlobal).es + ' / ' + getPAI(mainScores.paiGlobal).en + '</div><div style="font-size:11px;color:' + MUTED + '">Gap promedio entre Liderazgo y Organización</div></div>' +
+        '<div><div style="font-size:11px;color:' + CHARCOAL + ';font-weight:600">' + getPAI(mainScores.paiGlobal).es + '</div><div style="font-size:11px;color:' + MUTED + '">Gap promedio entre Liderazgo y Organización</div></div>' +
       '</div>' +
       '<p style="font-size:12px;color:' + CHARCOAL + ';line-height:1.75;margin:0 0 16px 0">' + paiExplainer(mainScores) + '</p>' +
       paiTableHTML(mainDims, mainScores) +
     '</div>' : '') +
 
     // Dimension details
-    '<div class="section-title">Análisis por Dimensión / Dimension Analysis</div>' +
+    '<div class="section-title">Análisis por Dimensión</div>' +
     dimSections +
 
     // Deep Dive
     (deepSections ? '<div class="section-title">Deep Dive — Módulos Avanzados</div>' + deepSections : '') +
 
     // Roadmap
-    '<div class="section-title">Roadmap de Intervención / Intervention Roadmap</div>' +
+    '<div class="section-title">Roadmap de Intervención</div>' +
     '<div style="margin-bottom:24px">' + roadmapItems + '</div>' +
 
     // Footer — logo asset is a light/cream fill (designed for the dark green
