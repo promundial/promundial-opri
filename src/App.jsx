@@ -3077,7 +3077,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
           '<button onclick="window.close()" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);padding:8px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">← Volver</button>' +
         '</div>' +
       '</div>' +
-      '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:6px">Descarga el archivo, ábrelo y usa Cmd+P → Guardar como PDF para obtener el PDF final.</div>' +
+      '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:6px">El archivo ya se descargó automáticamente a tu carpeta de Descargas. Ábrelo desde ahí y usa Cmd+P → Guardar como PDF. (El botón "Descargar Reporte" de aquí es solo para volver a bajarlo si lo necesitas.)</div>' +
     '</div>' +
     '</div>' +
 
@@ -3146,14 +3146,28 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
     '</div></body></html>';
 
-  // We navigate the already-open window to a Blob URL instead of calling
-  // document.write() again on it. Writing final content on top of a window
-  // whose document already went through open()/write() once (for the
-  // loading screen) is what causes Safari to blank the tab after the user
-  // interacts with window.print() — the print dialog interrupts a document
-  // that was assembled programmatically rather than loaded as a real page.
-  // A Blob URL is a real navigation target, so the printed tab behaves like
-  // any normal web page before and after printing.
+  // Descarga automática e inmediata del archivo .html — se dispara AHORA,
+  // en el contexto de esta pestaña (Admin), que está activa y garantizada
+  // de seguir viva, en vez de depender de que el usuario vuelva más tarde a
+  // la pestaña emergente del reporte y presione un botón ahí. Esto es
+  // necesario porque confirmamos que Safari puede descargar/recargar
+  // pestañas en segundo plano que llevan un rato inactivas — y una pestaña
+  // basada en blob: no puede reconstruirse tras eso, quedando en blanco.
+  // Al descargar ya mismo, el archivo queda a salvo en disco sin depender
+  // de que esa pestaña siga con vida.
+  var dlBlob = new Blob([html], { type: "text/html;charset=utf-8" });
+  var dlUrl = URL.createObjectURL(dlBlob);
+  var dlLink = document.createElement("a");
+  dlLink.href = dlUrl;
+  dlLink.download = safeCompanyName;
+  document.body.appendChild(dlLink);
+  dlLink.click();
+  document.body.removeChild(dlLink);
+  setTimeout(function() { URL.revokeObjectURL(dlUrl); }, 8000);
+
+  // Además, mostramos el reporte en la ventana emergente para lectura
+  // inmediata (útil mientras la pestaña sigue "fresca"). Esta vista es solo
+  // de conveniencia — el archivo que importa ya se descargó arriba.
   var blob = new Blob([html], { type: "text/html;charset=utf-8" });
   var blobUrl = URL.createObjectURL(blob);
   if (win && !win.closed) {
