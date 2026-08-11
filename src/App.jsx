@@ -3077,7 +3077,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
           '<button onclick="window.close()" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);padding:8px 16px;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px">← Volver</button>' +
         '</div>' +
       '</div>' +
-      '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:6px">El archivo ya se descargó automáticamente a tu carpeta de Descargas. Ábrelo desde ahí y usa Cmd+P → Guardar como PDF. (El botón "Descargar Reporte" de aquí es solo para volver a bajarlo si lo necesitas.)</div>' +
+      '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:6px">Presiona <strong>"⬇ Descargar Reporte"</strong> ahora mismo (no dejes esta pestaña inactiva) para guardarlo. Luego ábrelo desde Descargas y usa Cmd+P → Guardar como PDF.</div>' +
     '</div>' +
     '</div>' +
 
@@ -3146,28 +3146,14 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
     '</div></body></html>';
 
-  // Descarga automática e inmediata del archivo .html — se dispara AHORA,
-  // en el contexto de esta pestaña (Admin), que está activa y garantizada
-  // de seguir viva, en vez de depender de que el usuario vuelva más tarde a
-  // la pestaña emergente del reporte y presione un botón ahí. Esto es
-  // necesario porque confirmamos que Safari puede descargar/recargar
-  // pestañas en segundo plano que llevan un rato inactivas — y una pestaña
-  // basada en blob: no puede reconstruirse tras eso, quedando en blanco.
-  // Al descargar ya mismo, el archivo queda a salvo en disco sin depender
-  // de que esa pestaña siga con vida.
-  var dlBlob = new Blob([html], { type: "text/html;charset=utf-8" });
-  var dlUrl = URL.createObjectURL(dlBlob);
-  var dlLink = document.createElement("a");
-  dlLink.href = dlUrl;
-  dlLink.download = safeCompanyName;
-  document.body.appendChild(dlLink);
-  dlLink.click();
-  document.body.removeChild(dlLink);
-  setTimeout(function() { URL.revokeObjectURL(dlUrl); }, 8000);
-
-  // Además, mostramos el reporte en la ventana emergente para lectura
-  // inmediata (útil mientras la pestaña sigue "fresca"). Esta vista es solo
-  // de conveniencia — el archivo que importa ya se descargó arriba.
+  // Mostramos el reporte en la ventana emergente. La descarga automática
+  // (intentada en una iteración anterior) resultó bloqueada por Safari: al
+  // dispararse después de un await (la llamada a la API), ya no cuenta como
+  // una acción directa del usuario, así que el navegador la deja "atascada"
+  // en silencio. Por eso la descarga vuelve a ser manual — pero el aviso en
+  // pantalla le pide al usuario que la dispare de inmediato, apenas se abre
+  // el reporte, para minimizar el riesgo de que Safari descargue la pestaña
+  // en segundo plano si pasa un rato inactiva antes de usarla.
   var blob = new Blob([html], { type: "text/html;charset=utf-8" });
   var blobUrl = URL.createObjectURL(blob);
   if (win && !win.closed) {
