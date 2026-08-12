@@ -13,6 +13,26 @@
 // proyecto de Vercel (Settings → Environment Variables) y en tu .env.local
 // para pruebas locales con `vercel dev`.
 
+// El prompt que genera la narrativa completa (5 dimensiones del Core, y
+// potencialmente más si el reporte incluye Deep Dive) puede tardar más de
+// los 10s que Vercel asigna por defecto a una función serverless en el
+// plan Hobby. Sin este ajuste, la función se corta a mitad de camino y el
+// navegador ve un fetch fallido genérico ("Load failed"), no un error HTTP
+// identificable.
+//
+// 300s (5 minutos) es el máximo permitido en el plan Hobby CON Fluid
+// Compute habilitado (Settings → Functions → Fluid Compute en el
+// dashboard de Vercel). Si tu proyecto no tiene Fluid Compute activado,
+// el máximo real en Hobby es 60s — en ese caso, baja este valor a 60
+// (Vercel simplemente lo capará al máximo permitido si dejas 300 sin
+// Fluid Compute, así que no rompe nada dejarlo así, pero no obtendrías
+// el margen extra). Subir este número no cuesta nada mientras no se use
+// — Vercel cobra por el tiempo real de ejecución, no por el máximo
+// configurado.
+export const config = {
+  maxDuration: 300,
+};
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
