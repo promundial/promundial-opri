@@ -2083,7 +2083,7 @@ function EngagementSurveyPage({ code }) {
   }
 
   if (!engagement) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 16, padding: 24 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 24 }}>
       <div style={{ textAlign: "center", maxWidth: 320 }}>
         <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
         <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 8 }}>Encuesta no encontrada</div>
@@ -2094,7 +2094,7 @@ function EngagementSurveyPage({ code }) {
 
   const isExpired = engagement.close_date && new Date(engagement.close_date) < new Date();
   if (engagement.status === "closed" || isExpired) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 16, padding: 24 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: CREAM, padding: 24 }}>
       <div style={{ textAlign: "center", maxWidth: 340 }}>
         <div style={{ fontSize: 36, marginBottom: 12 }}>✓</div>
         <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, color: GREEN, marginBottom: 8 }}>Esta encuesta ha cerrado</div>
@@ -2394,10 +2394,14 @@ function getRecommendations(dimId, score) {
         "Mapeo de iniciativas actuales vs. prioridades estratégicas (Urgente/Importante + OKR)",
         "I2E™ Fase DECODE: identificar por qué las prioridades no se traducen en acción",
         "Rutinas de seguimiento estratégico mensual (S&OP adaptado)",
-      ] : [
+      ] : isStable ? [
         "QFD avanzado: despliegue a indicadores financieros (EVA, EBITDA) y operativos por proceso",
         "I2E™ Fase SCALE: estandarizar el modelo de comunicación estratégica sin perder agilidad",
         "Dashboard estratégico en tiempo real ligado a KPIs financieros",
+      ] : [
+        "Benchmarking externo del modelo de cascada estratégica contra las mejores prácticas del sector",
+        "I2E™ Fase SUSTAIN: gobernanza formal del modelo de alineación para que sobreviva cambios de liderazgo",
+        "Documentar el modelo como caso de estudio interno para replicarlo en otras unidades de negocio",
       ],
       belbin: isCritical ? [
         "Talleres Belbin para identificar Coordinador/Cerebro en el equipo directivo",
@@ -2406,9 +2410,12 @@ function getRecommendations(dimId, score) {
       ] : isVulnerable ? [
         "Identificar perfiles Coordinador e Investigador de Recursos para liderar comunicación estratégica",
         "Sesión de feedback Belbin con el equipo de dirección",
-      ] : [
+      ] : isStable ? [
         "Aprovechar perfiles Especialista para profundizar en análisis estratégico",
         "Reforzar el rol de Monitor Evaluador en revisiones de estrategia",
+      ] : [
+        "Usar al equipo actual como panel de mentores Belbin para otras áreas de la organización",
+        "Documentar la composición de roles que sostiene esta alineación como plantilla replicable",
       ],
       leadership: isCritical ? [
         "Programa de alineación de liderazgo: 'Leading with Strategy'",
@@ -2417,9 +2424,12 @@ function getRecommendations(dimId, score) {
       ] : isVulnerable ? [
         "Sesiones de calibración de mensajes entre niveles de liderazgo",
         "Programa de storytelling estratégico para líderes de área",
-      ] : [
+      ] : isStable ? [
         "Desarrollo de líderes como embajadores de la estrategia",
         "Programa de mentoring cruzado entre áreas para reforzar alineación",
+      ] : [
+        "Programa de líderes como formadores internos de alineación estratégica para otras unidades",
+        "Incluir la capacidad de comunicar estrategia como criterio explícito en los planes de sucesión",
       ],
     },
     execution: {
@@ -2436,10 +2446,14 @@ function getRecommendations(dimId, score) {
         "Dashboard operativo con semáforos de desempeño por área",
         "I2E™ Fase ADAPT: traducir mejores prácticas al contexto cultural y tecnológico de la empresa",
         "I2E™ Fase SUSTAIN: asegurar ownership y governance de mejoras implementadas",
-      ] : [
+      ] : isStable ? [
         "Evolucionar de Lean hacia Six Sigma: reducción de variabilidad en procesos clave",
         "I2E™ Fase SCALE: estandarizar, desplegar y replicar modelo operativo sin perder agilidad",
         "Sistema de sugerencias Kaizen + I2E™ para innovación incremental desde la base",
+      ] : [
+        "Certificación Black Belt para consolidar la mejora continua como función permanente, no como iniciativa",
+        "I2E™ Fase SUSTAIN: auditorías periódicas de disciplina operativa para prevenir la erosión del estándar",
+        "Documentar el modelo operativo como referencia interna para nuevas unidades o adquisiciones",
       ],
       belbin: isCritical ? [
         "Identificar perfiles Implementador y Finalizador — roles críticos en ejecución",
@@ -2448,9 +2462,12 @@ function getRecommendations(dimId, score) {
       ] : isVulnerable ? [
         "Fortalecer perfiles Cohesionador para mejorar seguimiento y disciplina operativa",
         "Análisis de brechas de roles en los equipos de mayor responsabilidad",
-      ] : [
+      ] : isStable ? [
         "Optimizar la composición de equipos de mejora continua",
         "Programa de desarrollo de Finalizadores internos",
+      ] : [
+        "Usar los equipos actuales como mentores Belbin para equipos de ejecución en otras áreas",
+        "Rotar Finalizadores ya desarrollados hacia unidades con menor madurez de ejecución",
       ],
       leadership: isCritical ? [
         "Programa 'Accountability Leadership': cultura de responsabilidad y seguimiento",
@@ -2459,9 +2476,12 @@ function getRecommendations(dimId, score) {
       ] : isVulnerable ? [
         "Taller de liderazgo situacional aplicado a equipos de ejecución",
         "Desarrollo de rituales de seguimiento en cada nivel jerárquico",
-      ] : [
+      ] : isStable ? [
         "Evolucionar hacia liderazgo de alto rendimiento: delegación y autonomía",
         "Programa de desarrollo de líderes de mejora continua",
+      ] : [
+        "Programa de líderes ejecutores como referentes internos de disciplina operativa",
+        "Incorporar la capacidad de ejecución sostenida como criterio explícito de promoción",
       ],
     },
     leadership: {
@@ -2475,10 +2495,14 @@ function getRecommendations(dimId, score) {
         "Estandarizar el proceso de toma de decisiones con datos (A3 Thinking)",
         "Implementar revisiones de desempeño estructuradas mensuales",
         "I2E™ Fase ADAPT: adecuar modelo de liderazgo colectivo a cultura y capacidades actuales",
-      ] : [
+      ] : isStable ? [
         "Evolucionar hacia gestión predictiva: de KPIs reactivos a leading indicators",
         "I2E™ Fase SCALE: institucionalizar el modelo de liderazgo de alto rendimiento",
         "Sistema de gestión visual integrado entre niveles directivos",
+      ] : [
+        "Auditoría externa de gobernanza directiva para validar que el modelo resiste el crecimiento de la organización",
+        "I2E™ Fase SUSTAIN: revisión anual del modelo de liderazgo colectivo con métricas de efectividad",
+        "Documentar el modelo de gobernanza como activo intangible de la organización",
       ],
       belbin: isCritical ? [
         "Diagnóstico Belbin completo del Comité Directivo",
@@ -2489,9 +2513,12 @@ function getRecommendations(dimId, score) {
         "Sesión de retroalimentación Belbin entre pares directivos",
         "Taller: 'Cómo los roles de equipo impactan la efectividad del liderazgo colectivo'",
         "Coaching individual basado en perfil Belbin para C-Suite",
-      ] : [
+      ] : isStable ? [
         "Programa avanzado de liderazgo colectivo basado en complementariedad de roles",
         "Facilitar conversaciones de confianza usando perfiles Belbin como lenguaje común",
+      ] : [
+        "Usar al comité directivo actual como caso de referencia Belbin para desarrollar futuros equipos",
+        "Plan de sucesión que preserve deliberadamente la complementariedad de roles lograda",
       ],
       leadership: isCritical ? [
         "Programa de desarrollo de confianza directiva: 'Building Trust at the Top'",
@@ -2502,9 +2529,12 @@ function getRecommendations(dimId, score) {
         "Programa de comunicación no violenta para líderes",
         "Sesiones de co-creación de acuerdos de trabajo en el equipo directivo",
         "Taller de inteligencia emocional aplicada al liderazgo colectivo",
-      ] : [
+      ] : isStable ? [
         "Evolucionar hacia liderazgo distribuido y co-liderazgo",
         "Programa de desarrollo de líderes de líderes",
+      ] : [
+        "Formalizar el liderazgo distribuido como modelo de gobernanza, no como práctica informal",
+        "Programa de mentoring del comité directivo hacia la siguiente generación de líderes",
       ],
     },
     resilience: {
@@ -2518,10 +2548,14 @@ function getRecommendations(dimId, score) {
         "Implementar ciclos de retrospectiva mensual (Lessons Learned estructurado)",
         "I2E™ Fase ADAPT: traducir aprendizajes al contexto real de cultura, procesos y tecnología",
         "I2E™ Fase DECODE: identificar qué principios subyacentes bloquean la adaptación",
-      ] : [
+      ] : isStable ? [
         "I2E™ Fase SCALE: estandarizar y replicar la capacidad de innovación sin perder agilidad",
         "I2E™ Fase EXECUTE: convertir la innovación en procesos, KPIs y rutinas de gestión",
         "Sistema de gestión de ideas e innovación incremental institucionalizado",
+      ] : [
+        "Benchmarking externo de la capacidad de innovación contra los líderes del sector",
+        "I2E™ Fase SUSTAIN: gobernanza del sistema de innovación para que no dependa de personas específicas",
+        "Programa de innovación abierta con clientes o socios estratégicos",
       ],
       belbin: isCritical ? [
         "Identificar perfiles Cerebro e Investigador de Recursos — clave para adaptabilidad",
@@ -2529,9 +2563,12 @@ function getRecommendations(dimId, score) {
       ] : isVulnerable ? [
         "Potenciar el perfil Investigador de Recursos para detectar tendencias",
         "Desarrollar la capacidad de Monitor Evaluador para analizar opciones ante el cambio",
-      ] : [
+      ] : isStable ? [
         "Aprovechar perfiles Cerebro para impulsar innovación organizacional",
         "Crear equipos de innovación con diversidad de roles Belbin",
+      ] : [
+        "Usar los equipos de innovación actuales como incubadora de talento para otras áreas",
+        "Documentar la composición de roles que sostiene la capacidad de cambio como modelo replicable",
       ],
       leadership: isCritical ? [
         "Programa de liderazgo en tiempos de cambio: 'Leading Through Uncertainty'",
@@ -2540,9 +2577,12 @@ function getRecommendations(dimId, score) {
       ] : isVulnerable ? [
         "Taller de liderazgo adaptativo: distinguir trabajo técnico de trabajo adaptativo",
         "Desarrollar la capacidad de aprendizaje organizacional desde el liderazgo",
-      ] : [
+      ] : isStable ? [
         "Evolucionar hacia liderazgo de innovación: crear condiciones para experimentar",
         "Programa de desarrollo de cultura de aprendizaje continuo",
+      ] : [
+        "Posicionar a los líderes actuales como voceros de la capacidad de adaptación de la organización",
+        "Programa formal de gestión del conocimiento para preservar los aprendizajes de cambio ante rotación de personal",
       ],
     },
     culture: {
@@ -2557,10 +2597,14 @@ function getRecommendations(dimId, score) {
         "Implementar canales formales de comunicación interna bidireccional",
         "I2E™ Fase ADAPT: adecuar iniciativas culturales al contexto real de cada área",
         "I2E™ Fase SUSTAIN: asegurar ownership cultural con governance y evolución permanente",
-      ] : [
+      ] : isStable ? [
         "I2E™ Fase SCALE: replicar la cultura de alto rendimiento en toda la organización",
         "Programa de embajadores culturales en cada área",
         "Medición periódica de cultura con pulso trimestral",
+      ] : [
+        "Certificación externa de cultura organizacional (p. ej. Great Place to Work) para validar y comunicar el logro",
+        "I2E™ Fase SUSTAIN: gobernanza cultural con revisión anual y planes de acción por área",
+        "Documentar la cultura como ventaja competitiva en la comunicación externa (marca empleadora)",
       ],
       belbin: isCritical ? [
         "Taller Belbin para toda la organización: crear lenguaje común de roles y contribuciones",
@@ -2569,9 +2613,12 @@ function getRecommendations(dimId, score) {
       ] : isVulnerable ? [
         "Sesiones de team building basadas en perfiles Belbin",
         "Comunicar el valor de cada rol para reforzar la cultura de contribución",
-      ] : [
+      ] : isStable ? [
         "Usar Belbin para optimizar la colaboración entre áreas",
         "Desarrollar una cultura de roles complementarios como ventaja competitiva",
+      ] : [
+        "Usar Belbin como parte del proceso de selección para preservar la composición cultural lograda",
+        "Programa de embajadores Belbin en el onboarding de nuevos empleados",
       ],
       leadership: isCritical ? [
         "Programa de liderazgo cultural: 'Culture Starts at the Top'",
@@ -2580,9 +2627,12 @@ function getRecommendations(dimId, score) {
       ] : isVulnerable ? [
         "Programa de liderazgo empático y presencia ejecutiva",
         "Taller: 'Cómo los líderes construyen culturas de alto desempeño'",
-      ] : [
+      ] : isStable ? [
         "Evolucionar hacia cultura de alto rendimiento y bienestar",
         "Programa de desarrollo de líderes como arquitectos culturales",
+      ] : [
+        "Posicionar a los líderes actuales como referentes de cultura en publicaciones o conferencias del sector",
+        "Incluir la sostenibilidad cultural como criterio explícito al evaluar y contratar nuevos líderes",
       ],
     },
   };
@@ -2826,6 +2876,37 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
   var aiInterpretations = {};
   var narrativeError = null;
 
+  // Saneamiento defensivo: el modelo a veces incluye saltos de línea o tabs
+  // literales dentro de los valores de texto en vez de escaparlos (\n, \t)
+  // — el estándar JSON exige que los caracteres de control estén escapados
+  // dentro de un string, así que un salto de línea "crudo" ahí rompe
+  // JSON.parse con "Unterminated string". Recorremos el texto carácter por
+  // carácter y solo escapamos esos caracteres cuando estamos DENTRO de un
+  // string JSON — el whitespace estructural entre propiedades (fuera de
+  // strings) se deja intacto, para no romper JSON válido con formato "bonito".
+  function sanitizeJsonText(text) {
+    var out = "";
+    var inString = false;
+    var escaped = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (inString) {
+        if (escaped) { out += ch; escaped = false; continue; }
+        if (ch === "\\") { out += ch; escaped = true; continue; }
+        if (ch === '"') { out += ch; inString = false; continue; }
+        if (ch === "\n") { out += "\\n"; continue; }
+        if (ch === "\r") { continue; }
+        if (ch === "\t") { out += "\\t"; continue; }
+        if (ch.charCodeAt(0) < 0x20) { continue; }
+        out += ch;
+      } else {
+        if (ch === '"') { inString = true; }
+        out += ch;
+      }
+    }
+    return out;
+  }
+
   // Helper: one attempt at calling the narrative endpoint + parsing its JSON.
   async function tryGenerateNarrative(promptText) {
     var resp = await fetch("/api/generate-narrative", {
@@ -2839,6 +2920,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     }
     var text = data.content && data.content[0] ? data.content[0].text : "";
     text = text.replace(/```json|```/g, "").trim();
+    text = sanitizeJsonText(text);
     return JSON.parse(text);
   }
 
@@ -2955,7 +3037,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
   // templated (not a per-group API call) to keep report generation fast and
   // affordable, but varied enough not to feel robotic across 40 groups.
   function deepWhySentence(modName, groupLabel, sc) {
-    var band = sc < 2.5 ? "crit" : sc < 3.2 ? "vuln" : "stable";
+    var band = sc < 2.5 ? "crit" : sc < 3.2 ? "vuln" : sc < 3.8 ? "stable" : "strong";
     var variants = {
       crit: [
         "Un resultado de " + sc.toFixed(2) + " en " + groupLabel + " no es un matiz — es una señal de que esto se vive como un problema recurrente dentro de " + modName + ", y por eso las líneas de abajo apuntan a intervenir directamente, no a ajustar en el margen.",
@@ -2967,6 +3049,10 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       ],
       stable: [
         groupLabel + " ya está en un nivel razonable (" + sc.toFixed(2) + ") dentro de " + modName + ", así que estas sugerencias son más sobre consolidar y escalar lo que ya funciona que sobre corregir algo roto.",
+      ],
+      strong: [
+        groupLabel + " está en " + sc.toFixed(2) + " dentro de " + modName + " — zona de alto desempeño. Ninguna dimensión está nunca del todo terminada, así que estas líneas no buscan corregir un problema sino sostener el nivel logrado y convertirlo en una práctica replicable para el resto de la organización.",
+        "Con " + sc.toFixed(2) + ", " + groupLabel + " es una de las fortalezas de " + modName + "; el riesgo aquí no es que se rompa de golpe, sino que se dé por sentado con el tiempo — por eso las sugerencias abajo apuntan a institucionalizar lo que hoy funciona, no a arreglarlo.",
       ],
     };
     var opts = variants[band];
@@ -2991,13 +3077,11 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       var pct = sc != null ? (sc / 5 * 100).toFixed(1) : 0;
       var recs = sc != null ? getDeepRecs(m.id, g.label, sc) : null;
       var recsHtml = '';
-      // Umbral alineado a la banda de madurez real (Estable termina en 3.8,
-      // no en 3.5) — así cualquier grupo que el lector vea etiquetado como
-      // "ESTABLE" o peor siempre trae explicación y herramientas; solo
-      // "Alto Desempeño" / "World Class" las omiten. Antes el corte en 3.5
-      // partía la banda Estable a la mitad, dejando algunos grupos con el
-      // mismo rótulo con texto y otros sin él.
-      if (recs && sc < 3.8) {
+      // Tratamiento completo (párrafo + herramientas) para todos los
+      // grupos, sin importar el score — ninguna dimensión se considera
+      // "terminada"; lo que cambia con el score es el tono (corregir vs.
+      // sostener/escalar), no si se muestra o no.
+      if (recs && sc != null) {
         recsHtml = '<div style="margin-top:10px;padding-left:14px;border-left:2px solid #E5E5E5">' +
           '<p style="font-size:11px;color:' + CHARCOAL + ';line-height:1.6;margin:0 0 10px 0">' + deepWhySentence(m.fullName, g.label, sc) + '</p>' +
           '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0">' +
