@@ -2990,29 +2990,30 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     };
   }
 
-  // ── Call Claude for Deep Dive group narratives ───────────────────────────────
-  // deepNarratives is indexed by numeric position: "0", "1", "2"...
-  // deepNarrativesIndex maps that position back to "modId|||groupLabel"
+  // ── Call Claude for Deep Dive group narratives — one module at a time ──────
+  // Split by module to avoid exceeding max_tokens in a single call.
   var deepNarratives = {};
-  var deepNarrativesIndex = []; // [{modId, groupLabel}]
 
   if (activeMods.length > 0) {
-    var deepContextBlocks = [];
-    activeMods.forEach(function(m) {
+    for (var mi = 0; mi < activeMods.length; mi++) {
+      var m = activeMods[mi];
       var deepRR = allResponses.filter(function(r) { return r.survey === "deep_" + m.id; });
       var deepSc = computeDeep(deepRR, m);
-      if (!deepSc) return;
+      if (!deepSc) continue;
+
+      // Build blocks for this module only
+      var modBlocks = [];
+      var modIndex = []; // [{groupLabel}] indexed 0,1,2...
       m.groups.forEach(function(g) {
         var sc = deepSc.groupScores[g.label];
         if (sc == null) return;
         var mat = getM(sc);
         var recs = getDeepRecs(m.id, g.label, sc);
         if (!recs) return;
-        var idx = deepNarrativesIndex.length;
-        deepNarrativesIndex.push({ modId: m.id, groupLabel: g.label });
-        deepContextBlocks.push(
+        var idx = modIndex.length;
+        modIndex.push(g.label);
+        modBlocks.push(
           "ID: " + idx + "\n" +
-          "MODULE: " + m.fullName + "\n" +
           "GROUP: " + g.label + "\n" +
           "Score: " + sc.toFixed(2) + "/5.00 — " + mat.es + "\n" +
           "LSS/I2E™: " + recs.lss.slice(0,2).join("; ") + "\n" +
@@ -3020,43 +3021,39 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
           "Leadership: " + recs.leadership.slice(0,2).join("; ")
         );
       });
-    });
 
-    if (deepContextBlocks.length > 0) {
-      // Build the JSON shape example using numeric IDs — safe, no special chars in keys
-      var jsonShape = "{" + deepNarrativesIndex.map(function(_, i) {
-        return '"' + i + '":"<párrafo de análisis aquí>"';
+      if (modBlocks.length === 0) continue;
+
+      var jsonShape = "{" + modIndex.map(function(_, i) {
+        return '"' + i + '":"..."';
       }).join(",") + "}";
 
-      var deepPrompt = "You are a senior partner at Promundial Consulting Group writing the Deep Dive section of an OPRI™ diagnostic report for " + eng.company + ".\n\n" +
-        "For each group below (identified by its ID number), write a diagnostic paragraph IN SPANISH ONLY of 3-4 sentences that:\n" +
-        "1. States the finding as a specific diagnostic claim about what is happening operationally at this score level — not a generic observation.\n" +
-        "2. Justifies WHY 1-2 of the specific recommended tools listed are the right lever — name the mechanism they address, tied to the finding.\n" +
-        "3. Calibrates tone to the score: below 2.5 = direct and urgent; 2.5-3.2 = clear about the risk; 3.2-3.8 = consolidate and scale what works; above 3.8 = institutionalize and protect.\n" +
-        "Write in natural Spanish. No bullet points. No AI clichés. Be concrete and specific.\n\n" +
-        deepContextBlocks.join("\n\n---\n\n") + "\n\n" +
-        "Respond ONLY with valid JSON using the numeric IDs as keys, no markdown fences:\n" + jsonShape;
+      var modPrompt = "You are a senior partner at Promundial Consulting Group writing the " + m.fullName + " section of an OPRI™ report for " + eng.company + ".\n\n" +
+        "For each group (by ID), write a diagnostic paragraph IN SPANISH ONLY of 3-4 sentences:\n" +
+        "1. State the specific operational finding at this score — not generic.\n" +
+        "2. Justify WHY 1-2 of the listed tools are the right lever, tied to the finding.\n" +
+        "3. Tone: <2.5=urgent; 2.5-3.2=alert; 3.2-3.8=consolidate; >3.8=institutionalize.\n" +
+        "Natural Spanish. No bullets. No clichés. Concrete.\n\n" +
+        modBlocks.join("\n\n---\n\n") + "\n\n" +
+        "Respond ONLY with valid JSON, numeric IDs as keys, no markdown:\n" + jsonShape;
 
-      console.log("OPRI Deep Dive: enviando prompt para", deepNarrativesIndex.length, "grupos");
+      console.log("OPRI Deep Dive: módulo", m.index, "—", modIndex.length, "grupos");
       try {
-        var deepResp = await tryGenerateNarrative(deepPrompt);
-        console.log("OPRI Deep Dive: respuesta recibida", deepResp);
-        // Map numeric keys back to modId|||groupLabel keys
-        if (deepResp) {
-          Object.keys(deepResp).forEach(function(numKey) {
+        var modResp = await tryGenerateNarrative(modPrompt);
+        if (modResp) {
+          Object.keys(modResp).forEach(function(numKey) {
             var i = parseInt(numKey, 10);
-            if (!isNaN(i) && deepNarrativesIndex[i]) {
-              var entry = deepNarrativesIndex[i];
-              deepNarratives[entry.modId + "|||" + entry.groupLabel] = deepResp[numKey];
+            if (!isNaN(i) && modIndex[i]) {
+              deepNarratives[m.id + "|||" + modIndex[i]] = modResp[numKey];
             }
           });
+          console.log("OPRI Deep Dive:", m.index, "OK —", Object.keys(modResp).length, "grupos");
         }
-        console.log("OPRI Deep Dive: narrativas mapeadas", Object.keys(deepNarratives).length, "grupos");
-      } catch(deepErr) {
-        console.error("OPRI Deep Dive narratives FAILED:", deepErr);
-        deepNarratives = {};
+      } catch(modErr) {
+        console.error("OPRI Deep Dive", m.index, "FAILED:", modErr);
       }
     }
+    console.log("OPRI Deep Dive: total narrativas", Object.keys(deepNarratives).length);
   }
 
   // ── Build HTML report ──────────────────────────────────────────────────────
