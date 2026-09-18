@@ -2990,6 +2990,58 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     };
   }
 
+  // ── Call Claude for Deep Dive group narratives ───────────────────────────────
+  var deepNarratives = {}; // { "lei:Vulnerabilidad & Confianza": "párrafo..." }
+
+  if (activeMods.length > 0) {
+    // Build context: for each active module, for each group with responses, send score + recs
+    var deepContextBlocks = [];
+    activeMods.forEach(function(m) {
+      var deepRR = allResponses.filter(function(r) { return r.survey === "deep_" + m.id; });
+      var deepSc = computeDeep(deepRR, m);
+      if (!deepSc) return;
+      m.groups.forEach(function(g) {
+        var sc = deepSc.groupScores[g.label];
+        if (sc == null) return;
+        var mat = getM(sc);
+        var recs = getDeepRecs(m.id, g.label, sc);
+        if (!recs) return;
+        deepContextBlocks.push(
+          "MODULE: " + m.fullName + " (" + m.index + ")\n" +
+          "GROUP: " + g.label + "\n" +
+          "Score: " + sc.toFixed(2) + "/5.00 — " + mat.es + "\n" +
+          "LSS/I2E™: " + recs.lss.slice(0,2).join(" | ") + "\n" +
+          "Belbin: " + recs.belbin.slice(0,2).join(" | ") + "\n" +
+          "Leadership: " + recs.leadership.slice(0,2).join(" | ") + "\n" +
+          "KEY_ID: " + m.id + "|||" + g.label
+        );
+      });
+    });
+
+    if (deepContextBlocks.length > 0) {
+      var deepPrompt = "You are a senior partner at Promundial Consulting Group writing the Deep Dive section of an OPRI™ diagnostic report for " + eng.company + ".\n\n" +
+        "For each group below, write a diagnostic paragraph IN SPANISH ONLY of 3-4 sentences that:\n" +
+        "1. States the finding as a specific diagnostic claim about what is happening operationally when this group scores what it scores — not a generic observation.\n" +
+        "2. Justifies WHY 1-2 of the specific recommended tools listed are the right lever — name the mechanism they address, tied directly to the finding.\n" +
+        "3. Calibrates the tone to the score: Crítico (<2.5) = direct and urgent; Vulnerable (2.5-3.2) = clear about the risk and early intervention; Estable (3.2-3.8) = consolidate and scale; Alto Desempeño (>3.8) = institutionalize and protect.\n\n" +
+        "Write in natural Spanish business register. No bullet points, no headers inside the paragraph. No AI clichés. Be concrete and specific.\n\n" +
+        "Groups to analyze:\n\n" + deepContextBlocks.join("\n\n---\n\n") + "\n\n" +
+        "Respond ONLY with valid JSON, no markdown fences, in this exact shape — use the KEY_ID values as keys:\n" +
+        "{" + deepContextBlocks.map(function(b) {
+          var keyMatch = b.match(/KEY_ID: (.+)/);
+          return keyMatch ? '"' + keyMatch[1].replace(/"/g, '\\"') + '":"..."' : '';
+        }).filter(Boolean).join(",") + "}";
+
+      try {
+        var deepResp = await tryGenerateNarrative(deepPrompt);
+        deepNarratives = deepResp || {};
+      } catch(deepErr) {
+        console.warn("Deep Dive narratives failed:", deepErr);
+        deepNarratives = {};
+      }
+    }
+  }
+
   // ── Build HTML report ──────────────────────────────────────────────────────
   var date = new Date().toLocaleDateString("es-ES", { year: "numeric", month: "long", day: "numeric" });
   var safeCompanyName = "OPRI-Report-" + (eng.company || "reporte").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") + ".html";
@@ -3083,7 +3135,11 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       // sostener/escalar), no si se muestra o no.
       if (recs && sc != null) {
         recsHtml = '<div style="margin-top:10px;padding-left:14px;border-left:2px solid #E5E5E5">' +
-          '<p style="font-size:11px;color:' + CHARCOAL + ';line-height:1.6;margin:0 0 10px 0">' + deepWhySentence(m.fullName, g.label, sc) + '</p>' +
+          (function() {
+            var deepKey = m.id + "|||" + g.label;
+            var deepText = deepNarratives[deepKey] || deepWhySentence(m.fullName, g.label, sc);
+            return '<p style="font-size:11px;color:' + CHARCOAL + ';line-height:1.6;margin:0 0 10px 0">' + deepText + '</p>';
+          })() +
           '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0">' +
             recBlock("LSS / I2E™", recs.lss.slice(0,2)) +
             recBlock("Belbin", recs.belbin.slice(0,2)) +
