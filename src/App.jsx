@@ -2908,11 +2908,11 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
   }
 
   // Helper: one attempt at calling the narrative endpoint + parsing its JSON.
-  async function tryGenerateNarrative(promptText) {
+  async function tryGenerateNarrative(promptText, maxTok) {
     var resp = await fetch("/api/generate-narrative", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: promptText, max_tokens: 8000 })
+      body: JSON.stringify({ prompt: promptText, max_tokens: maxTok || 8000 })
     });
     var data = await resp.json();
     if (!resp.ok) {
@@ -3018,26 +3018,62 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       });
     });
 
-    if (deepContextBlocks.length > 0) {
-      var deepPrompt = "You are a senior partner at Promundial Consulting Group writing the Deep Dive section of an OPRI™ diagnostic report for " + eng.company + ".\n\n" +
-        "For each group below, write a diagnostic paragraph IN SPANISH ONLY of 3-4 sentences that:\n" +
-        "1. States the finding as a specific diagnostic claim about what is happening operationally when this group scores what it scores — not a generic observation.\n" +
-        "2. Justifies WHY 1-2 of the specific recommended tools listed are the right lever — name the mechanism they address, tied directly to the finding.\n" +
-        "3. Calibrates the tone to the score: Crítico (<2.5) = direct and urgent; Vulnerable (2.5-3.2) = clear about the risk and early intervention; Estable (3.2-3.8) = consolidate and scale; Alto Desempeño (>3.8) = institutionalize and protect.\n\n" +
-        "Write in natural Spanish business register. No bullet points, no headers inside the paragraph. No AI clichés. Be concrete and specific.\n\n" +
-        "Groups to analyze:\n\n" + deepContextBlocks.join("\n\n---\n\n") + "\n\n" +
+    // Llamamos POR MÓDULO (no todos juntos) para evitar que el JSON se corte
+    // por límite de tokens de output. Cada módulo tiene ~6-8 grupos → caben
+    // cómodamente en 16 000 tokens de respuesta.
+    function buildDeepPromptForBlocks(blocks) {
+      return "You are a senior partner at Promundial Consulting Group writing the Deep Dive section of an OPRI™ diagnostic report for " + eng.company + ". The bar is a McKinsey or Bain report — specific, blunt where needed, economical, and written in the voice of someone who has run organizations, not just studied them.\n\n" +
+        "For each group below, write a diagnostic paragraph IN SPANISH ONLY of 5 to 8 sentences (in flowing prose — no bullet points, no sub-headers) that does ALL of the following:\n\n" +
+        "1. LEAD WITH THE FINDING. The first sentence is the headline diagnostic claim — not a setup, not 'this dimension shows X'. It states what is actually happening inside " + eng.company + " when this score is what it is. Use the company name at least once in the paragraph.\n\n" +
+        "2. NAME THE MECHANISM. Go past the observation. If leadership scores low, say WHY: is it a system problem (no structure for development), a culture problem (feedback avoidance), or a capability problem (nobody was taught how)? The score tells you the severity; the mechanism is your job to diagnose from context.\n\n" +
+        "3. USE NUMBERS AS PROOF. Reference the exact score inside a sentence as evidence for the claim — '2.92 en Desarrollo de Personas no es un margen estrecho, es la diferencia entre…'. Don't dump numbers; use them the way a lawyer uses evidence.\n\n" +
+        "4. JUSTIFY THE TOOLS BY MECHANISM. Name 2-3 of the specific recommended tools and explain WHY each one addresses the specific mechanism you diagnosed — not 'this tool can help', but 'el I2E™ DECODE es el punto de partida necesario aquí porque permite identificar el principio específico — sea control, miedo al juicio o rivalidad silenciosa — que está bloqueando la confianza real, algo que no puede corregirse sin primero nombrarse con precisión.' That level of specificity. Reference each tool by its real name inside a sentence.\n\n" +
+        "5. CALIBRATE TONE TO SCORE:\n" +
+        "   - Crítico (<2.5): direct, urgent, plain language about what is broken — no softening\n" +
+        "   - Vulnerable (2.5-3.2): clear about the risk and why early intervention matters; name the cost of not acting\n" +
+        "   - Estable (3.2-3.8): consolidate and institutionalize; name the specific risk of complacency at this level\n" +
+        "   - Alto Desempeño (>3.8): protect and replicate; name what could erode this and how to prevent it\n\n" +
+        "REGISTER — what separates this from an AI summary:\n" +
+        "- Be willing to be blunt. A 2.1 gets direct language about what's broken.\n" +
+        "- No AI clichés: 'en el entorno actual', 'holístico', 'robusto', 'fomentar una cultura de', 'apalancar'\n" +
+        "- No consulting filler: 'sinergias', 'generar valor', 'mejores prácticas', 'mover la aguja'\n" +
+        "- Vary paragraph shape and sentence length — paragraphs for different groups should not feel like the same template\n" +
+        "- Write in natural Spanish business register (Ecuador/Latin America) — ONLY Spanish, no English anywhere\n\n" +
+        "CLIENT: " + eng.company + "\n\n" +
+        "Groups to analyze:\n\n" + blocks.join("\n\n---\n\n") + "\n\n" +
         "Respond ONLY with valid JSON, no markdown fences, in this exact shape — use the KEY_ID values as keys:\n" +
-        "{" + deepContextBlocks.map(function(b) {
+        "{" + blocks.map(function(b) {
           var keyMatch = b.match(/KEY_ID: (.+)/);
           return keyMatch ? '"' + keyMatch[1].replace(/"/g, '\\"') + '":"..."' : '';
         }).filter(Boolean).join(",") + "}";
+    }
 
+    // Agrupar deepContextBlocks por módulo (prefijo antes de "|||")
+    var blocksByMod = {};
+    deepContextBlocks.forEach(function(b) {
+      var keyMatch = b.match(/KEY_ID: (.+)/);
+      if (!keyMatch) return;
+      var modId = keyMatch[1].split("|||")[0];
+      if (!blocksByMod[modId]) blocksByMod[modId] = [];
+      blocksByMod[modId].push(b);
+    });
+
+    // Llamar un prompt por módulo, máximo 16 000 tokens de output
+    for (var modId in blocksByMod) {
+      var modBlocks = blocksByMod[modId];
+      if (!modBlocks.length) continue;
+      var modPrompt = buildDeepPromptForBlocks(modBlocks);
       try {
-        var deepResp = await tryGenerateNarrative(deepPrompt);
-        deepNarratives = deepResp || {};
+        var modResp = await (async function(p) {
+          try { return await tryGenerateNarrative(p, 16000); }
+          catch(e) {
+            console.warn("Deep Dive módulo " + modId + " primer intento falló, reintentando…", e);
+            return await tryGenerateNarrative(p, 16000);
+          }
+        })(modPrompt);
+        if (modResp) Object.assign(deepNarratives, modResp);
       } catch(deepErr) {
-        console.warn("Deep Dive narratives failed:", deepErr);
-        deepNarratives = {};
+        console.warn("Deep Dive narratives failed for module " + modId + ":", deepErr);
       }
     }
   }
