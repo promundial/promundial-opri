@@ -2871,7 +2871,20 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
   // ── Call Claude API for AI interpretations ──
   var win = window.open("", "_blank");
-  win.document.write('<html><body style="font-family:sans-serif;padding:40px;text-align:center;color:#6B7280"><h2 style="color:#1B4332">Generando reporte OPRI™...</h2><p>Redactando el análisis narrativo · Por favor espere (puede tomar un minuto)</p><div style="font-size:32px;margin-top:20px">⏳</div></body></html>');
+  win.document.write('<html><head><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#F9FAFB;display:flex;align-items:center;justify-content:center;min-height:100vh}.card{background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.10);padding:48px 56px;max-width:540px;width:90%;text-align:center}.logo{font-size:13px;font-weight:700;letter-spacing:.12em;color:#9CA3AF;margin-bottom:24px}.title{font-size:22px;font-weight:700;color:#1B4332;margin-bottom:8px}.subtitle{font-size:14px;color:#6B7280;margin-bottom:32px}.steps{list-style:none;text-align:left;border-top:1px solid #E5E7EB;padding-top:20px}.step{display:flex;align-items:center;gap:12px;padding:10px 0;font-size:14px;color:#9CA3AF;border-bottom:1px solid #F3F4F6}.step.done{color:#1B4332}.step.active{color:#374151;font-weight:600}.step-icon{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;background:#F3F4F6;color:#9CA3AF}.step.done .step-icon{background:#D1FAE5;color:#065F46}.step.active .step-icon{background:#FEF3C7;color:#92400E;animation:pulse 1.2s ease-in-out infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}.eta{font-size:12px;color:#9CA3AF;margin-top:20px}</style></head><body><div class="card"><div class="logo">PROMUNDIAL · OPRI™</div><div class="title">Generando reporte diagnóstico</div><div class="subtitle">El análisis es intensivo · Por favor no cierre esta ventana</div><ul class="steps" id="steps"><li class="step active" id="step-main"><span class="step-icon" id="icon-main">⏳</span><span>Narrativa principal (resumen + 5 dimensiones)</span></li><li class="step" id="step-lei"><span class="step-icon" id="icon-lei">2</span><span>Deep Dive — LEI™ (Liderazgo)</span></li><li class="step" id="step-tcs"><span class="step-icon" id="icon-tcs">3</span><span>Deep Dive — TCS™ (Cultura & Confianza)</span></li><li class="step" id="step-eci"><span class="step-icon" id="icon-eci">4</span><span>Deep Dive — ECI™ (Comunicación)</span></li><li class="step" id="step-aci"><span class="step-icon" id="icon-aci">5</span><span>Deep Dive — ACI™ (Agilidad)</span></li><li class="step" id="step-report"><span class="step-icon" id="icon-report">6</span><span>Compilando y renderizando reporte</span></li></ul><div class="eta" id="eta">Tiempo estimado: 5–10 minutos</div></div></body></html>');
+  win.document.close();
+
+  // Helper to update a loading step in the popup window
+  function setStep(id, state) {
+    // state: 'active' | 'done' | 'skip'
+    try {
+      var el = win.document.getElementById("step-" + id);
+      var icon = win.document.getElementById("icon-" + id);
+      if (!el || !icon) return;
+      el.className = "step " + (state === "skip" ? "" : state);
+      icon.textContent = state === "done" ? "✓" : state === "active" ? "⏳" : (icon.textContent || "·");
+    } catch(e) { /* window may have been closed */ }
+  }
 
   var aiInterpretations = {};
   var narrativeError = null;
@@ -2981,7 +2994,9 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
       console.warn("Primer intento de narrativa falló, reintentando…", firstErr);
       aiInterpretations = await tryGenerateNarrative(prompt);
     }
+    setStep("main", "done");
   } catch(e) {
+    setStep("main", "done");
     console.error("Narrativa OPRI™ no disponible tras reintentar, usando texto de respaldo:", e);
     narrativeError = (e && e.message) ? e.message : String(e);
     aiInterpretations = {
@@ -3061,24 +3076,28 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     // Llamar un prompt por módulo, máximo 16 000 tokens de output
     for (var modId in blocksByMod) {
       var modBlocks = blocksByMod[modId];
-      if (!modBlocks.length) continue;
+      if (!modBlocks.length) { setStep(modId, "skip"); continue; }
+      setStep(modId, "active");
       var modPrompt = buildDeepPromptForBlocks(modBlocks);
       try {
-        var modResp = await (async function(p) {
+        var modResp = await (async function(p, mid) {
           try { return await tryGenerateNarrative(p, 16000); }
           catch(e) {
-            console.warn("Deep Dive módulo " + modId + " primer intento falló, reintentando…", e);
+            console.warn("Deep Dive módulo " + mid + " primer intento falló, reintentando…", e);
             return await tryGenerateNarrative(p, 16000);
           }
-        })(modPrompt);
+        })(modPrompt, modId);
         if (modResp) Object.assign(deepNarratives, modResp);
+        setStep(modId, "done");
       } catch(deepErr) {
         console.warn("Deep Dive narratives failed for module " + modId + ":", deepErr);
+        setStep(modId, "done"); // mark done even on error so UI keeps moving
       }
     }
   }
 
   // ── Build HTML report ──────────────────────────────────────────────────────
+  setStep("report", "active");
   var date = new Date().toLocaleDateString("es-ES", { year: "numeric", month: "long", day: "numeric" });
   var safeCompanyName = "OPRI-Report-" + (eng.company || "reporte").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") + ".html";
   var maturity = getM(mainScores.opri);
