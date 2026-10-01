@@ -3176,21 +3176,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
   }).join('');
 
   // ── Roadmap OD+OpEx — Diagnose with empathy, prescribe with rigor ──
-  //
-  // PHILOSOPHY: No ordenamos por score ranking mecánico.
-  // Usamos el PAI™ como indicador de riesgo primario (brecha percepción
-  // liderazgo vs organización), luego identificamos la dimensión más crítica
-  // para cada horizonte temporal, y prescribimos herramientas DO + OpEx.
-  //
-  // Prioridad 1 (0-30 días): Cerrar brechas de percepción/alineación más urgentes
-  //   — Instrumento DO: seguridad psicológica, escucha activa, conversaciones directas
-  //   — Instrumento OpEx: Hoshin Kanri / I2E™ SUSTAIN
-  // Prioridad 2 (60 días): Institucionalización del liderazgo y gobernanza
-  //   — Instrumento DO: Belbin Team Roles, dinámica de equipo directivo
-  //   — Instrumento OpEx: Leader Standard Work, A3 Problem Solving
-  // Prioridad 3 (90 días): Blindaje operativo y capacidad adaptativa
-  //   — Instrumento DO: cultura de mejora continua, aprendizaje organizacional
-  //   — Instrumento OpEx: LSS Green/Black Belt, I2E™ EXPERIMENT→EXECUTE
+  var CRIMSON = "#8B1A2F";
 
   // Herramientas DO+OpEx por dimensión
   var ROADMAP_TOOLS = {
