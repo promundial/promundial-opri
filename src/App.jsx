@@ -2990,70 +2990,56 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     };
   }
 
-  // ── Call Claude for Deep Dive group narratives — one module at a time ──────
-  // Split by module to avoid exceeding max_tokens in a single call.
-  var deepNarratives = {};
+  // ── Call Claude for Deep Dive group narratives ───────────────────────────────
+  var deepNarratives = {}; // { "lei:Vulnerabilidad & Confianza": "párrafo..." }
 
   if (activeMods.length > 0) {
-    for (var mi = 0; mi < activeMods.length; mi++) {
-      var m = activeMods[mi];
+    // Build context: for each active module, for each group with responses, send score + recs
+    var deepContextBlocks = [];
+    activeMods.forEach(function(m) {
       var deepRR = allResponses.filter(function(r) { return r.survey === "deep_" + m.id; });
       var deepSc = computeDeep(deepRR, m);
-      if (!deepSc) continue;
-
-      // Build blocks for this module only
-      var modBlocks = [];
-      var modIndex = []; // [{groupLabel}] indexed 0,1,2...
+      if (!deepSc) return;
       m.groups.forEach(function(g) {
         var sc = deepSc.groupScores[g.label];
         if (sc == null) return;
         var mat = getM(sc);
         var recs = getDeepRecs(m.id, g.label, sc);
         if (!recs) return;
-        var idx = modIndex.length;
-        modIndex.push(g.label);
-        modBlocks.push(
-          "ID: " + idx + "\n" +
+        deepContextBlocks.push(
+          "MODULE: " + m.fullName + " (" + m.index + ")\n" +
           "GROUP: " + g.label + "\n" +
           "Score: " + sc.toFixed(2) + "/5.00 — " + mat.es + "\n" +
-          "LSS/I2E™: " + recs.lss.slice(0,2).join("; ") + "\n" +
-          "Belbin: " + recs.belbin.slice(0,2).join("; ") + "\n" +
-          "Leadership: " + recs.leadership.slice(0,2).join("; ")
+          "LSS/I2E™: " + recs.lss.slice(0,2).join(" | ") + "\n" +
+          "Belbin: " + recs.belbin.slice(0,2).join(" | ") + "\n" +
+          "Leadership: " + recs.leadership.slice(0,2).join(" | ") + "\n" +
+          "KEY_ID: " + m.id + "|||" + g.label
         );
       });
+    });
 
-      if (modBlocks.length === 0) continue;
+    if (deepContextBlocks.length > 0) {
+      var deepPrompt = "You are a senior partner at Promundial Consulting Group writing the Deep Dive section of an OPRI™ diagnostic report for " + eng.company + ".\n\n" +
+        "For each group below, write a diagnostic paragraph IN SPANISH ONLY of 3-4 sentences that:\n" +
+        "1. States the finding as a specific diagnostic claim about what is happening operationally when this group scores what it scores — not a generic observation.\n" +
+        "2. Justifies WHY 1-2 of the specific recommended tools listed are the right lever — name the mechanism they address, tied directly to the finding.\n" +
+        "3. Calibrates the tone to the score: Crítico (<2.5) = direct and urgent; Vulnerable (2.5-3.2) = clear about the risk and early intervention; Estable (3.2-3.8) = consolidate and scale; Alto Desempeño (>3.8) = institutionalize and protect.\n\n" +
+        "Write in natural Spanish business register. No bullet points, no headers inside the paragraph. No AI clichés. Be concrete and specific.\n\n" +
+        "Groups to analyze:\n\n" + deepContextBlocks.join("\n\n---\n\n") + "\n\n" +
+        "Respond ONLY with valid JSON, no markdown fences, in this exact shape — use the KEY_ID values as keys:\n" +
+        "{" + deepContextBlocks.map(function(b) {
+          var keyMatch = b.match(/KEY_ID: (.+)/);
+          return keyMatch ? '"' + keyMatch[1].replace(/"/g, '\\"') + '":"..."' : '';
+        }).filter(Boolean).join(",") + "}";
 
-      var jsonShape = "{" + modIndex.map(function(_, i) {
-        return '"' + i + '":"..."';
-      }).join(",") + "}";
-
-      var modPrompt = "You are a senior partner at Promundial Consulting Group writing the " + m.fullName + " section of an OPRI™ report for " + eng.company + ".\n\n" +
-        "For each group (by ID), write a diagnostic paragraph IN SPANISH ONLY of 3-4 sentences:\n" +
-        "1. State the specific operational finding at this score — not generic.\n" +
-        "2. Justify WHY 1-2 of the listed tools are the right lever, tied to the finding.\n" +
-        "3. Tone: <2.5=urgent; 2.5-3.2=alert; 3.2-3.8=consolidate; >3.8=institutionalize.\n" +
-        "Natural Spanish. No bullets. No clichés. Concrete.\n\n" +
-        modBlocks.join("\n\n---\n\n") + "\n\n" +
-        "Respond ONLY with valid JSON, numeric IDs as keys, no markdown:\n" + jsonShape;
-
-      console.log("OPRI Deep Dive: módulo", m.index, "—", modIndex.length, "grupos");
       try {
-        var modResp = await tryGenerateNarrative(modPrompt);
-        if (modResp) {
-          Object.keys(modResp).forEach(function(numKey) {
-            var i = parseInt(numKey, 10);
-            if (!isNaN(i) && modIndex[i]) {
-              deepNarratives[m.id + "|||" + modIndex[i]] = modResp[numKey];
-            }
-          });
-          console.log("OPRI Deep Dive:", m.index, "OK —", Object.keys(modResp).length, "grupos");
-        }
-      } catch(modErr) {
-        console.error("OPRI Deep Dive", m.index, "FAILED:", modErr);
+        var deepResp = await tryGenerateNarrative(deepPrompt);
+        deepNarratives = deepResp || {};
+      } catch(deepErr) {
+        console.warn("Deep Dive narratives failed:", deepErr);
+        deepNarratives = {};
       }
     }
-    console.log("OPRI Deep Dive: total narrativas", Object.keys(deepNarratives).length);
   }
 
   // ── Build HTML report ──────────────────────────────────────────────────────
@@ -3189,19 +3175,130 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     '</div>';
   }).join('');
 
-  // Roadmap priorities
-  var roadmapItems = dimsSorted.slice(0, 3).map(function(x, i) {
-    var meta = DIM_META[x.dim.id];
-    var m = getM(x.score);
-    var priority = i === 0 ? "Prioridad 1 — Intervención Inmediata" : i === 1 ? "Prioridad 2 — Intervención a 60 días" : "Prioridad 3 — Intervención a 90 días";
-    return '<div style="display:flex;gap:14px;margin-bottom:14px;page-break-inside:avoid">' +
-      '<div style="width:26px;height:26px;border:1.5px solid ' + CHARCOAL + ';color:' + CHARCOAL + ';display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;font-family:Georgia,serif">' + (i+1) + '</div>' +
-      '<div style="flex:1;border-bottom:1px solid #E5E5E5;padding-bottom:12px">' +
-        '<div style="font-size:9px;color:' + MUTED + ';font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px">' + priority + '</div>' +
-        '<div style="font-size:13px;font-weight:700;color:' + CHARCOAL + '">' + meta.es + ' <span style="font-family:Georgia,serif;font-weight:700">— ' + x.score.toFixed(2) + '</span></div>' +
+  // ── Roadmap OD+OpEx — Diagnose with empathy, prescribe with rigor ──
+  //
+  // PHILOSOPHY: No ordenamos por score ranking mecánico.
+  // Usamos el PAI™ como indicador de riesgo primario (brecha percepción
+  // liderazgo vs organización), luego identificamos la dimensión más crítica
+  // para cada horizonte temporal, y prescribimos herramientas DO + OpEx.
+  //
+  // Prioridad 1 (0-30 días): Cerrar brechas de percepción/alineación más urgentes
+  //   — Instrumento DO: seguridad psicológica, escucha activa, conversaciones directas
+  //   — Instrumento OpEx: Hoshin Kanri / I2E™ SUSTAIN
+  // Prioridad 2 (60 días): Institucionalización del liderazgo y gobernanza
+  //   — Instrumento DO: Belbin Team Roles, dinámica de equipo directivo
+  //   — Instrumento OpEx: Leader Standard Work, A3 Problem Solving
+  // Prioridad 3 (90 días): Blindaje operativo y capacidad adaptativa
+  //   — Instrumento DO: cultura de mejora continua, aprendizaje organizacional
+  //   — Instrumento OpEx: LSS Green/Black Belt, I2E™ EXPERIMENT→EXECUTE
+
+  // Herramientas DO+OpEx por dimensión
+  var ROADMAP_TOOLS = {
+    SA: {
+      do:    ["Taller de escucha activa: del mensaje declarado a la realidad vivida", "Diagnóstico de alineación estratégica: conversaciones estructuradas por nivel"],
+      opex:  ["Hoshin Kanri / X-Matrix: cascada de objetivos estratégicos a KPIs operativos", "I2E™ Fase OBSERVE: mapear fricciones entre estrategia declarada y ejecución real"],
+      belbin:["Identificar roles Coordinador y Monitor-Evaluador — claves en alineación estratégica", "Workshop: 'Arquitectura de equipo para la ejecución estratégica'"]
+    },
+    EX: {
+      do:    ["Sistema de Daily Management con tableros visuales de seguimiento por área", "Programa de accountability operativa: cultura de cierre de compromisos"],
+      opex:  ["I2E™ Fase EXPERIMENT→EXECUTE: convertir mejoras en procesos y rutinas de accountability", "Green Belt en áreas críticas de ejecución + VSM de los 3 procesos más lentos"],
+      belbin:["Identificar perfiles Implementador y Finalizador — roles críticos en ejecución", "Rediseño de equipos de proyecto asignando responsabilidades según roles Belbin"]
+    },
+    LE: {
+      do:    ["Programa de seguridad psicológica basado en Amy Edmondson: de la evaluación a la curiosidad", "Coaching ejecutivo en liderazgo situacional: del control a la habilitación"],
+      opex:  ["Leader Standard Work: rutinas de liderazgo medibles y auditables", "I2E™ Fase SUSTAIN: institucionalizar comportamientos de liderazgo como estándar operativo"],
+      belbin:["Diagnóstico Belbin del equipo directivo: identificar roles ausentes o en conflicto", "Taller: 'El equipo que lidera: cómo la complementariedad cognitiva mejora decisiones'"]
+    },
+    RC: {
+      do:    ["Taller de conversaciones difíciles: comunicar el cambio sin disparar resistencia", "Sesiones de aprendizaje organizacional: qué podemos hacer diferente la próxima vez"],
+      opex:  ["I2E™ Fase DECODE: identificar qué estructuras o incentivos frenan la adaptación", "After Action Review (AAR) estructurado post-crisis para construir memoria organizacional"],
+      belbin:["Mapeo de roles Monitor-Evaluador e Investigador de Recursos — cruciales en adaptabilidad", "Workshop: 'Equipos resilientes: cómo la diversidad de roles reduce el punto único de falla'"]
+    },
+    OC: {
+      do:    ["Diagnóstico de cultura real vs. cultura declarada: las historias que se cuentan vs. las que se viven", "Programa de embajadores culturales: líderes como modeladores del comportamiento deseado"],
+      opex:  ["I2E™ Fase SUSTAIN: convertir comportamientos culturales en estándares medibles", "Sistema de reconocimiento y refuerzo positivo alineado a valores operacionales"],
+      belbin:["Análisis de roles Cohesionador y Especialista — catalizadores de cultura positiva", "Taller: 'La cultura se ejecuta: cómo los roles de equipo refuerzan o destruyen la identidad'"]
+    }
+  };
+
+  // Determinar qué dimensión tiene mayor PAI (riesgo de percepción)
+  var paiByDim = mainScores.paiByDim || {};
+  var dimsByPAI = mainDims.map(function(d) {
+    return { dim: d, score: mainScores.dimScores[d.id], pai: paiByDim[d.id] != null ? Math.abs(paiByDim[d.id]) : 0 };
+  }).filter(function(x) { return x.score != null; });
+
+  // Prioridad 1: dimensión con mayor PAI (brecha percepción más peligrosa)
+  var p1Candidates = dimsByPAI.slice().sort(function(a,b) { return b.pai - a.pai; });
+  var p1 = p1Candidates[0] || dimsSorted[0];
+
+  // Prioridad 2: de las dimensiones de Liderazgo/Cultura, la más crítica
+  // (excluimos la de P1 para no repetir)
+  var p2Candidates = dimsSorted.filter(function(x) {
+    return x.dim.id !== p1.dim.id && (x.dim.id === "LE" || x.dim.id === "OC" || x.dim.id === "SA");
+  });
+  var p2 = p2Candidates[0] || dimsSorted.find(function(x) { return x.dim.id !== p1.dim.id; }) || dimsSorted[1];
+
+  // Prioridad 3: dimensión más crítica restante (Ejecución o Resiliencia)
+  var p3Candidates = dimsSorted.filter(function(x) {
+    return x.dim.id !== p1.dim.id && x.dim.id !== p2.dim.id;
+  });
+  var p3 = p3Candidates[0] || dimsSorted[2];
+
+  function buildRoadmapCard(rank, labelEs, labelHorizon, dimEntry, colorDot) {
+    if (!dimEntry) return '';
+    var dimId = dimEntry.dim.id;
+    var meta = DIM_META[dimId];
+    var tools = ROADMAP_TOOLS[dimId] || ROADMAP_TOOLS["SA"];
+    var score = dimEntry.score;
+    var pai = dimsByPAI.find(function(x) { return x.dim.id === dimId; });
+    var paiVal = pai ? pai.pai : null;
+    var isCrit = score < 3.0;
+    var scoreColor = isCrit ? CRIMSON : (score < 3.5 ? "#B45309" : "#166534");
+
+    return '<div style="margin-bottom:20px;page-break-inside:avoid;border:1px solid #E5E5E5;border-radius:4px;overflow:hidden">' +
+      // Header
+      '<div style="background:' + (isCrit ? CRIMSON : CHARCOAL) + ';padding:10px 16px;display:flex;align-items:center;justify-content:space-between">' +
+        '<div>' +
+          '<div style="font-size:9px;color:rgba(255,255,255,0.65);font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px">' + labelHorizon + '</div>' +
+          '<div style="font-size:13px;font-weight:700;color:white">' + meta.es + '</div>' +
+          '<div style="font-size:10px;color:rgba(255,255,255,0.6)">' + meta.en + '</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-family:Georgia,serif;font-size:22px;font-weight:700;color:white">' + score.toFixed(2) + '</div>' +
+          (paiVal != null && paiVal > 0.2 ? '<div style="font-size:9px;color:rgba(255,255,255,0.6)">PAI™ gap: ' + paiVal.toFixed(2) + '</div>' : '') +
+        '</div>' +
+      '</div>' +
+      // Tools body
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">' +
+        // DO column
+        '<div style="padding:12px 14px;border-right:1px solid #E5E5E5">' +
+          '<div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6366F1;margin-bottom:8px">🧠 Desarrollo Organizacional</div>' +
+          tools.do.map(function(t) {
+            return '<div style="font-size:10px;color:' + CHARCOAL + ';line-height:1.55;margin-bottom:5px;padding-left:8px;border-left:2px solid #E0E7FF">'+t+'</div>';
+          }).join('') +
+        '</div>' +
+        // OpEx column
+        '<div style="padding:12px 14px;border-right:1px solid #E5E5E5">' +
+          '<div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#B45309;margin-bottom:8px">⚙ LSS / I2E™ Innovation-to-Execution</div>' +
+          tools.opex.map(function(t) {
+            return '<div style="font-size:10px;color:' + CHARCOAL + ';line-height:1.55;margin-bottom:5px;padding-left:8px;border-left:2px solid #FEF3C7">'+t+'</div>';
+          }).join('') +
+        '</div>' +
+        // Belbin column
+        '<div style="padding:12px 14px">' +
+          '<div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#1B4332;margin-bottom:8px">👥 Belbin Team Roles</div>' +
+          tools.belbin.map(function(t) {
+            return '<div style="font-size:10px;color:' + CHARCOAL + ';line-height:1.55;margin-bottom:5px;padding-left:8px;border-left:2px solid #D1FAE5">'+t+'</div>';
+          }).join('') +
+        '</div>' +
       '</div>' +
     '</div>';
-  }).join('');
+  }
+
+  var roadmapItems =
+    buildRoadmapCard(1, "Prioridad 1", "PRIORIDAD 1 — 0 A 30 DÍAS · Cerrar Brechas de Percepción y Alineación", p1, CRIMSON) +
+    buildRoadmapCard(2, "Prioridad 2", "PRIORIDAD 2 — 60 DÍAS · Institucionalización del Liderazgo y Gobernanza", p2, CHARCOAL) +
+    buildRoadmapCard(3, "Prioridad 3", "PRIORIDAD 3 — 90 DÍAS · Blindaje Operativo y Capacidad Adaptativa", p3, "#166534");
 
   var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">' +
     '<title>OPRI™ Report — ' + eng.company + '</title>' +
