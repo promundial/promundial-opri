@@ -3178,29 +3178,29 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
   // ── Roadmap OD+OpEx — Diagnose with empathy, prescribe with rigor ──
   var CRIMSON = "#8B1A2F";
 
-  // Herramientas DO+OpEx por dimensión
+  // Herramientas DO+OpEx por dimensión — keys = IDs reales de DIM_META
   var ROADMAP_TOOLS = {
-    SA: {
+    alignment: {
       do:    ["Taller de escucha activa: del mensaje declarado a la realidad vivida", "Diagnóstico de alineación estratégica: conversaciones estructuradas por nivel"],
       opex:  ["Hoshin Kanri / X-Matrix: cascada de objetivos estratégicos a KPIs operativos", "I2E™ Fase OBSERVE: mapear fricciones entre estrategia declarada y ejecución real"],
       belbin:["Identificar roles Coordinador y Monitor-Evaluador — claves en alineación estratégica", "Workshop: 'Arquitectura de equipo para la ejecución estratégica'"]
     },
-    EX: {
+    execution: {
       do:    ["Sistema de Daily Management con tableros visuales de seguimiento por área", "Programa de accountability operativa: cultura de cierre de compromisos"],
       opex:  ["I2E™ Fase EXPERIMENT→EXECUTE: convertir mejoras en procesos y rutinas de accountability", "Green Belt en áreas críticas de ejecución + VSM de los 3 procesos más lentos"],
       belbin:["Identificar perfiles Implementador y Finalizador — roles críticos en ejecución", "Rediseño de equipos de proyecto asignando responsabilidades según roles Belbin"]
     },
-    LE: {
+    leadership: {
       do:    ["Programa de seguridad psicológica basado en Amy Edmondson: de la evaluación a la curiosidad", "Coaching ejecutivo en liderazgo situacional: del control a la habilitación"],
       opex:  ["Leader Standard Work: rutinas de liderazgo medibles y auditables", "I2E™ Fase SUSTAIN: institucionalizar comportamientos de liderazgo como estándar operativo"],
       belbin:["Diagnóstico Belbin del equipo directivo: identificar roles ausentes o en conflicto", "Taller: 'El equipo que lidera: cómo la complementariedad cognitiva mejora decisiones'"]
     },
-    RC: {
+    resilience: {
       do:    ["Taller de conversaciones difíciles: comunicar el cambio sin disparar resistencia", "Sesiones de aprendizaje organizacional: qué podemos hacer diferente la próxima vez"],
       opex:  ["I2E™ Fase DECODE: identificar qué estructuras o incentivos frenan la adaptación", "After Action Review (AAR) estructurado post-crisis para construir memoria organizacional"],
       belbin:["Mapeo de roles Monitor-Evaluador e Investigador de Recursos — cruciales en adaptabilidad", "Workshop: 'Equipos resilientes: cómo la diversidad de roles reduce el punto único de falla'"]
     },
-    OC: {
+    culture: {
       do:    ["Diagnóstico de cultura real vs. cultura declarada: las historias que se cuentan vs. las que se viven", "Programa de embajadores culturales: líderes como modeladores del comportamiento deseado"],
       opex:  ["I2E™ Fase SUSTAIN: convertir comportamientos culturales en estándares medibles", "Sistema de reconocimiento y refuerzo positivo alineado a valores operacionales"],
       belbin:["Análisis de roles Cohesionador y Especialista — catalizadores de cultura positiva", "Taller: 'La cultura se ejecuta: cómo los roles de equipo refuerzan o destruyen la identidad'"]
@@ -3220,7 +3220,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
   // Prioridad 2: de las dimensiones de Liderazgo/Cultura, la más crítica
   // (excluimos la de P1 para no repetir)
   var p2Candidates = dimsSorted.filter(function(x) {
-    return x.dim.id !== p1.dim.id && (x.dim.id === "LE" || x.dim.id === "OC" || x.dim.id === "SA");
+    return x.dim.id !== p1.dim.id && (x.dim.id === "leadership" || x.dim.id === "culture" || x.dim.id === "alignment");
   });
   var p2 = p2Candidates[0] || dimsSorted.find(function(x) { return x.dim.id !== p1.dim.id; }) || dimsSorted[1];
 
@@ -3234,7 +3234,7 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     if (!dimEntry) return '';
     var dimId = dimEntry.dim.id;
     var meta = DIM_META[dimId];
-    var tools = ROADMAP_TOOLS[dimId] || ROADMAP_TOOLS["SA"];
+    var tools = ROADMAP_TOOLS[dimId] || ROADMAP_TOOLS["alignment"];
     var score = dimEntry.score;
     var pai = dimsByPAI.find(function(x) { return x.dim.id === dimId; });
     var paiVal = pai ? pai.pai : null;
