@@ -2888,6 +2888,8 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
 
   var aiInterpretations = {};
   var narrativeError = null;
+  var reportStartTime = Date.now();
+  var totalTokensUsed = 0;
 
   // Saneamiento defensivo: el modelo a veces incluye saltos de línea o tabs
   // literales dentro de los valores de texto en vez de escaparlos (\n, \t)
@@ -2930,6 +2932,10 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
     var data = await resp.json();
     if (!resp.ok) {
       throw new Error((data && data.error) ? JSON.stringify(data.error) : "HTTP " + resp.status);
+    }
+    // Accumulate token usage for Airtable tracking
+    if (data.usage) {
+      totalTokensUsed += (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0);
     }
     var text = data.content && data.content[0] ? data.content[0].text : "";
     text = text.replace(/```json|```/g, "").trim();
@@ -3456,6 +3462,22 @@ async function generateOPRIReport(eng, allResponses, CORE_DIMS, FULL_DIMS, DEEP_
   dlLink.click();
   document.body.removeChild(dlLink);
   setTimeout(function() { URL.revokeObjectURL(dlUrl); }, 8000);
+
+  // ── Track report generation in Airtable (via serverless endpoint) ───────────
+  try {
+    var reportDurationSec = Math.round((Date.now() - reportStartTime) / 1000);
+    await fetch("/api/track-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        engagement_code: eng.code,
+        tokens: totalTokensUsed,
+        duration_sec: reportDurationSec
+      })
+    });
+  } catch(atErr) {
+    console.warn("Airtable tracking failed (non-critical):", atErr);
+  }
 
   // Además, mostramos el reporte en la ventana emergente para lectura
   // inmediata. Con la descarga ya resuelta arriba, el usuario no necesita
