@@ -1853,6 +1853,13 @@ function EngCard({ eng, onClose, onReopen, onResults, closed, password, onReload
             </div>
           )}
           {eng.close_date && <div style={{ fontSize: 11, color: MUTED_LT, marginTop: 3, wordBreak: "break-word" }}>Cierre: {new Date(eng.close_date).toLocaleDateString("es-ES")}</div>}
+          {(eng.report_count > 0) && (
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 4, display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <span>📄 {eng.report_count} reporte{eng.report_count !== 1 ? "s" : ""} generado{eng.report_count !== 1 ? "s" : ""}</span>
+              {eng.last_report_tokens > 0 && <span>🔢 {eng.last_report_tokens.toLocaleString()} tokens</span>}
+              {eng.last_report_duration_sec > 0 && <span>⏱ {Math.round(eng.last_report_duration_sec / 60)} min</span>}
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end", maxWidth: "100%" }}>
           <button onClick={function() { onResults(eng); }} style={Object.assign({}, btn(BLUE, false), { fontSize: 11, padding: "7px 14px" })}>Ver resultados</button>
