@@ -8,7 +8,7 @@ export default async function handler(req, res) {
 
   const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
   const AIRTABLE_BASE  = process.env.AIRTABLE_BASE  || "appssQnoW5tndOZT7";
-  const AIRTABLE_TABLE = process.env.AIRTABLE_TABLE || "tblGXkLfigXOGKBsM";
+  const AIRTABLE_TABLE = process.env.AIRTABLE_TABLE || "tblP1wjtxXlUSA7ZG";
 
   if (!AIRTABLE_TOKEN) return res.status(500).json({ error: "AIRTABLE_TOKEN not set" });
 
