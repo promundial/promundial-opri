@@ -66,6 +66,9 @@ export default async function handler(req, res) {
       close_date: r.fields.close_date,
       response_count: r.fields.response_count || 0,
       survey_password: r.fields.survey_password || null,
+      report_count: r.fields.report_count || 0,
+      last_report_tokens: r.fields.last_report_tokens || 0,
+      last_report_duration_sec: r.fields.last_report_duration_sec || 0,
     }))});
   }
 
